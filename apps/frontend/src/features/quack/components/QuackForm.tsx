@@ -14,9 +14,12 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 
+import { quackMoods, quackMoodSchema } from "@/features/quack/api/quackSchemas"
 import { useAddQuack } from "@/features/quack/hooks/useAddQuack"
+import { quackMoodDisplay } from "@/features/quack/lib/quackMoods"
 
 // Mirrors the server-side DTO (MaxLength(280)) so the user is told before
 // the request is made — the server still validates independently.
@@ -28,6 +31,7 @@ const schema = z.object({
     .trim()
     .min(1, "Write something first")
     .max(MAX_LENGTH, `Keep it under ${MAX_LENGTH} characters`),
+  mood: quackMoodSchema.optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -38,14 +42,14 @@ export function QuackForm({ className }: QuackFormProps) {
   const addQuack = useAddQuack()
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { text: "" },
+    defaultValues: { text: "", mood: undefined },
   })
 
   const text = useWatch({ control: form.control, name: "text" })
   const length = text?.length ?? 0
 
   const handleSubmit = (values: FormValues) => {
-    addQuack.mutate({ text: values.text }, { onSuccess: () => form.reset() })
+    addQuack.mutate({ text: values.text, mood: values.mood }, { onSuccess: () => form.reset() })
   }
 
   return (
@@ -80,23 +84,58 @@ export function QuackForm({ className }: QuackFormProps) {
           )}
         />
 
-        <div className="flex items-center justify-end gap-3">
-          <span
-            className={cn(
-              "text-sm",
-              length > MAX_LENGTH ? "text-destructive" : "text-muted-foreground",
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <FormField
+            control={form.control}
+            name="mood"
+            render={({ field }) => (
+              <FormItem className="flex flex-wrap items-center gap-2">
+                <FormLabel className="text-sm text-muted-foreground">Mood</FormLabel>
+                <FormControl>
+                  {/* Optional: clicking the selected mood again clears it. */}
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    aria-label="Mood"
+                    value={field.value ?? ""}
+                    onValueChange={(value) => field.onChange(value === "" ? undefined : value)}
+                    disabled={addQuack.isPending}
+                  >
+                    {quackMoods.map((mood) => (
+                      <ToggleGroupItem
+                        key={mood}
+                        value={mood}
+                        className="px-3"
+                      >
+                        <span aria-hidden="true">{quackMoodDisplay[mood].emoji}</span>
+                        {quackMoodDisplay[mood].label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </FormControl>
+              </FormItem>
             )}
-          >
-            {length}/{MAX_LENGTH}
-          </span>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={addQuack.isPending}
-          >
-            {addQuack.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-            Quack
-          </Button>
+          />
+
+          <div className="flex items-center gap-3">
+            <span
+              className={cn(
+                "text-sm",
+                length > MAX_LENGTH ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {length}/{MAX_LENGTH}
+            </span>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={addQuack.isPending}
+            >
+              {addQuack.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Quack
+            </Button>
+          </div>
         </div>
       </form>
     </Form>
