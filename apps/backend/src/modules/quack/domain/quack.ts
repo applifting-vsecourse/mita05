@@ -2,6 +2,16 @@ export const QUACK_MOODS = ['happy', 'sad', 'angry', 'silly'] as const;
 
 export type QuackMood = (typeof QUACK_MOODS)[number];
 
+/**
+ * Splits a search query into the words that must all match.
+ * A leading "@" is dropped, because usernames are shown as @handle but stored without it.
+ */
+export const parseSearchTerms = (query: string | undefined): string[] =>
+  (query ?? '')
+    .split(/\s+/)
+    .map((word) => word.replace(/^@+/, ''))
+    .filter((word) => word.length > 0);
+
 export type QuackAuthor = {
   id: string;
   name: string;

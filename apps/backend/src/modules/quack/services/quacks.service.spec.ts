@@ -27,6 +27,42 @@ describe('QuacksService', () => {
 
     await expect(service.getQuacks()).resolves.toEqual(quacks);
     expect(repository.getQuacks).toHaveBeenCalledTimes(1);
+    expect(repository.getQuacks).toHaveBeenCalledWith([]);
+  });
+
+  it('splits a search into words that must all match', async () => {
+    const repository = mock<QuackRepository>();
+    repository.getQuacks.mockResolvedValue([]);
+
+    const service = new QuacksService(repository);
+
+    await service.getQuacks('  lunch   adela ');
+
+    expect(repository.getQuacks).toHaveBeenCalledWith(['lunch', 'adela']);
+  });
+
+  it('ignores a leading @ so @handle finds the username', async () => {
+    const repository = mock<QuackRepository>();
+    repository.getQuacks.mockResolvedValue([]);
+
+    const service = new QuacksService(repository);
+
+    await service.getQuacks('@ada lunch@noon');
+
+    expect(repository.getQuacks).toHaveBeenCalledWith(['ada', 'lunch@noon']);
+  });
+
+  it('treats a blank search as no search', async () => {
+    const repository = mock<QuackRepository>();
+    repository.getQuacks.mockResolvedValue([]);
+
+    const service = new QuacksService(repository);
+
+    await service.getQuacks('   ');
+    await service.getQuacks('@');
+
+    expect(repository.getQuacks).toHaveBeenNthCalledWith(1, []);
+    expect(repository.getQuacks).toHaveBeenNthCalledWith(2, []);
   });
 
   it('creates a quack owned by the signed-in user', async () => {

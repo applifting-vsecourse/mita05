@@ -24,6 +24,11 @@ const mapPrismaQuackToDomain = (
     : undefined,
 });
 
+// Prisma's `contains` becomes ILIKE '%' || term || '%' without escaping,
+// so a search for "%" or "_" would otherwise match every quack.
+const escapeLikeWildcards = (term: string): string =>
+  term.replace(/[\\%_]/g, '\\$&');
+
 /**
  * If you decide to choose a different ORM or database, you should only need to change the repository files methods implementation.
  * Inject what you need instead of PrismaService and re-implement the methods and model mapping.
@@ -32,8 +37,24 @@ const mapPrismaQuackToDomain = (
 export class QuackRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getQuacks(): Promise<Quack[]> {
+  /** With search terms, returns only quacks where every term appears in the text, author name or username. */
+  async getQuacks(searchTerms: string[] = []): Promise<Quack[]> {
     const quacks = await this.prisma.quack.findMany({
+      where: {
+        AND: searchTerms.map((term) => {
+          const contains = {
+            contains: escapeLikeWildcards(term),
+            mode: 'insensitive' as const,
+          };
+          return {
+            OR: [
+              { text: contains },
+              { user: { name: contains } },
+              { user: { username: contains } },
+            ],
+          };
+        }),
+      },
       include: { user: true },
       orderBy: { createdAt: 'desc' },
     });
