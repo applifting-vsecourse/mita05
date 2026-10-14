@@ -5,6 +5,7 @@ import { z } from "zod"
 
 import { Seo } from "@/components/Seo"
 
+import { profileQueryOptions } from "@/features/profile/api/profileQueryOptions"
 import { quacksQueryOptions } from "@/features/quack/api/quacksQueryOptions"
 import { QuackForm } from "@/features/quack/components/QuackForm"
 import { QuackList } from "@/features/quack/components/QuackList"
@@ -18,12 +19,18 @@ const quacksSearchParamsSchema = z.object({
 export const Route = createFileRoute("/_ProtectedPages/quacks")({
   component: QuacksPage,
   validateSearch: quacksSearchParamsSchema,
+  // The post form reads the default mood once, when it mounts, so have it ready.
+  // ensureQueryData reuses the cache, since this loader reruns on every search keystroke.
+  // A failure only costs the preselected mood, so it doesn't block the page.
+  loader: ({ context }) =>
+    context.queryClient.ensureQueryData(profileQueryOptions()).catch(() => undefined),
 })
 
 function QuacksPage() {
   const search = Route.useSearch().q?.trim() ?? ""
   const navigate = Route.useNavigate()
   const quacksQuery = useQuery(quacksQueryOptions(search))
+  const defaultMood = useQuery(profileQueryOptions()).data?.defaultMood ?? undefined
 
   // Replace rather than push, so typing doesn't add a history entry per search.
   const setSearch = useCallback(
@@ -37,7 +44,10 @@ function QuacksPage() {
       <section className="mx-auto w-full max-w-2xl px-4 py-8">
         <h1 className="mb-4 text-2xl font-semibold tracking-tight">Quacks</h1>
 
-        <QuackForm className="mb-4" />
+        <QuackForm
+          className="mb-4"
+          defaultMood={defaultMood}
+        />
 
         <QuackSearch
           className="mb-4"

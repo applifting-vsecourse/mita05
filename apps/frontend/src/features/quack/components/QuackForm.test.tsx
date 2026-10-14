@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -8,10 +9,10 @@ import { QuackForm } from "@/features/quack/components/QuackForm"
 
 vi.mock("@/features/quack/api/addQuack", () => ({ addQuack: vi.fn() }))
 
-const renderForm = () =>
+const renderForm = (props: ComponentProps<typeof QuackForm> = {}) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <QuackForm />
+      <QuackForm {...props} />
     </QueryClientProvider>,
   )
 
@@ -52,5 +53,20 @@ describe("QuackForm", () => {
 
     await userEvent.click(happy)
     expect(happy).toHaveAttribute("aria-checked", "false")
+  })
+  it("starts with the default mood selected, and again after posting", async () => {
+    vi.mocked(addQuack).mockResolvedValue({} as Awaited<ReturnType<typeof addQuack>>)
+    renderForm({ defaultMood: "sad" })
+
+    expect(screen.getByRole("radio", { name: "Sad" })).toHaveAttribute("aria-checked", "true")
+
+    await userEvent.type(screen.getByLabelText("New quack"), "hello")
+    await userEvent.click(screen.getByRole("button", { name: "Quack" }))
+
+    await waitFor(() =>
+      expect(vi.mocked(addQuack).mock.calls[0]?.[0]).toEqual({ text: "hello", mood: "sad" }),
+    )
+    await waitFor(() => expect(screen.getByLabelText("New quack")).toHaveValue(""))
+    expect(screen.getByRole("radio", { name: "Sad" })).toHaveAttribute("aria-checked", "true")
   })
 })
