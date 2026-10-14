@@ -1,5 +1,4 @@
-import type { QuackMood } from "@/features/quack/api/quackSchemas"
-import { quackMoodDisplay } from "@/features/quack/lib/quackMoods"
+import { quackMoodDisplay, type QuackMood } from "@/lib/quackMoods"
 
 type QuackMoodLabelProps = { mood: QuackMood }
 

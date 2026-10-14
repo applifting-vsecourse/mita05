@@ -108,6 +108,10 @@ model User {
   username        String? @db.VarChar(50)
   displayUsername String? @db.VarChar(50)
 
+  bio             String?    @db.VarChar(160)
+  // Preselected in the post form; null means no mood.
+  defaultMood     QuackMood?
+
   @@unique([email])
   @@unique([username])
   @@map("user")
