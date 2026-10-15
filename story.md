@@ -1,45 +1,54 @@
-# Search the quack feed
+# Story: Polls
 
-**As a** signed-in Quacker user
-**I want to** type a word I remember, or who wrote the post, and see only the matching posts
-**So that** I can find a post I saw earlier without scrolling through the whole feed
+## Why
 
-**Why now:** users report they can't find posts they saw last week. This is a minimal version to find out whether people use search.
+People ask questions in quacks ("where do we go for lunch?") and count the replies by hand. The counts end up wrong and the question gets buried under replies. Polls let someone ask a question with a few fixed answers, let everyone pick one, and show correct counts to everyone. This is a first version: we want to see whether people use it, so nothing beyond what's listed here.
+
+## User story
+
+As a signed-in Quacker user, I want to attach a poll to a quack and vote on other people's polls, so that the group can pick an answer without anyone counting replies by hand.
 
 ## Acceptance criteria
 
-### Search field
+### Creating a poll
 
-1. On `/quacks`, there is a search field above the feed, and the "post a quack" form is still visible.
-2. When I type in the field, the list updates without me pressing Enter or a button.
-3. After I search for `lunch`, the address bar shows `?q=lunch`. When I refresh the page, the same filtered list shows.
-4. When I clear the field, or type only spaces, the full feed shows.
-5. When I'm signed out and open `/quacks?q=lunch`, I'm redirected to login.
+1. A poll is part of a quack. The quack's text is the question, and the poll appears in the normal feed.
+2. The post form has an "Add poll" button that shows the answer fields. A "Remove poll" button hides them again, and the quack is then posted without a poll.
+3. A poll has 2 to 4 answers, each up to 80 characters. Empty answers and duplicate answers are rejected, both in the form and by the API.
+4. A poll quack can still have a mood, like any other quack.
+5. Once posted, a poll can't be edited or deleted, the same as quacks today.
 
-### What matches
+### Voting
 
-6. Searching `DUCK` finds a post containing "duck", so case doesn't matter.
-7. Searching `duck` finds posts containing "ducks" and "rubberduck", so part of a word is enough.
-8. Searching part of an author's display name, like `adel` for "Adela Mitrova", shows that author's posts.
-9. Searching part of an author's @username shows that author's posts.
-10. Searching `@ada` shows the same posts as `ada`.
-11. Searching `lunch adela` shows Adela's posts that mention lunch. It does not show other people's lunch posts, or Adela's posts without "lunch".
-12. Matching results show newest first, and they look the same as normal feed items.
+6. Every signed-in user can vote, including the poll's author.
+7. One person, one vote: each user has at most one vote per poll. The server enforces this, not only the UI.
+8. A user can change their vote to a different answer at any time.
+9. Clicking the answer you already picked does nothing. Once you have voted, you can't remove your vote, only switch it to another answer.
+10. If a user clicks quickly between answers, their last click is the vote that counts.
+11. Polls have no end date and stay open for voting forever.
 
-### Empty state
+### Results
 
-13. Searching for something that matches nothing shows "No quacks match '‹term›'." and a button.
-14. When I click that button, the field clears and the full feed shows.
-15. With a search active, when I post a quack that doesn't match it, the new quack doesn't appear in the list. When I clear the search, it does appear.
+12. Everyone sees the results straight away, whether or not they have voted.
+13. Each answer shows its vote count and a percentage bar. The poll shows the total number of votes.
+14. Results are anonymous: the app never shows who voted for what. The current user sees a mark on the answer they picked.
+15. The counts stored on the server are always correct. Users see up-to-date counts when the feed loads, when they come back to the tab, and after their own vote. Results don't update live while you're looking at them.
 
-## Out of scope
+### Feel and failure
 
-- Accent-insensitive matching (`kacka` will **not** find "Kačka")
-- Filtering by mood or date, highlighting matches, relevance ranking, typo tolerance
-- Measuring how often search is used (server logging or analytics), to be added once the first version proves useful
-- Pagination
+16. Voting feels instant: the user's choice and the counts update the moment they click, without waiting for the server.
+17. If a vote fails, the poll goes back to how it was before the click and a short error message appears, for example: "Your vote didn't go through, try again."
 
-## Technical notes
+### Search
 
-- Filtering happens on the server: `GET /api/quacks?q=…`.
-- The frontend waits about 300 ms after the last keystroke before searching, so typing a word quickly sends one request, not one per letter.
+18. Search matches only the question (the quack text), not the poll answers. Search behaviour doesn't change.
+
+## Out of scope for this version
+
+- Removing a vote
+- Closing polls, or setting an end date
+- Editing or deleting polls
+- Live updates of other people's votes (websockets or polling)
+- Seeing who voted for what
+- Picking more than one answer
+- Searching poll answers

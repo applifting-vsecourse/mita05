@@ -17,6 +17,8 @@ const aQuack = (overrides: Partial<Quack> = {}): Quack => ({
   ...overrides,
 });
 
+const viewer = { id: 'viewer' } as Identity;
+
 describe('QuacksService', () => {
   it('returns quacks from the repository', async () => {
     const quacks = [aQuack()];
@@ -25,9 +27,10 @@ describe('QuacksService', () => {
 
     const service = new QuacksService(repository);
 
-    await expect(service.getQuacks()).resolves.toEqual(quacks);
+    await expect(service.getQuacks(viewer)).resolves.toEqual(quacks);
     expect(repository.getQuacks).toHaveBeenCalledTimes(1);
-    expect(repository.getQuacks).toHaveBeenCalledWith([]);
+    // the viewer decides whose vote is reported as "my vote" in each poll
+    expect(repository.getQuacks).toHaveBeenCalledWith('viewer', []);
   });
 
   it('splits a search into words that must all match', async () => {
@@ -36,9 +39,12 @@ describe('QuacksService', () => {
 
     const service = new QuacksService(repository);
 
-    await service.getQuacks('  lunch   adela ');
+    await service.getQuacks(viewer, '  lunch   adela ');
 
-    expect(repository.getQuacks).toHaveBeenCalledWith(['lunch', 'adela']);
+    expect(repository.getQuacks).toHaveBeenCalledWith('viewer', [
+      'lunch',
+      'adela',
+    ]);
   });
 
   it('ignores a leading @ so @handle finds the username', async () => {
@@ -47,9 +53,12 @@ describe('QuacksService', () => {
 
     const service = new QuacksService(repository);
 
-    await service.getQuacks('@ada lunch@noon');
+    await service.getQuacks(viewer, '@ada lunch@noon');
 
-    expect(repository.getQuacks).toHaveBeenCalledWith(['ada', 'lunch@noon']);
+    expect(repository.getQuacks).toHaveBeenCalledWith('viewer', [
+      'ada',
+      'lunch@noon',
+    ]);
   });
 
   it('treats a blank search as no search', async () => {
@@ -58,11 +67,11 @@ describe('QuacksService', () => {
 
     const service = new QuacksService(repository);
 
-    await service.getQuacks('   ');
-    await service.getQuacks('@');
+    await service.getQuacks(viewer, '   ');
+    await service.getQuacks(viewer, '@');
 
-    expect(repository.getQuacks).toHaveBeenNthCalledWith(1, []);
-    expect(repository.getQuacks).toHaveBeenNthCalledWith(2, []);
+    expect(repository.getQuacks).toHaveBeenNthCalledWith(1, 'viewer', []);
+    expect(repository.getQuacks).toHaveBeenNthCalledWith(2, 'viewer', []);
   });
 
   it('creates a quack owned by the signed-in user', async () => {
@@ -81,6 +90,7 @@ describe('QuacksService', () => {
       text: 'hello',
       mood: null,
       userId: 'u1',
+      pollOptions: null,
     });
   });
 
@@ -97,6 +107,27 @@ describe('QuacksService', () => {
       text: 'hello',
       mood: 'silly',
       userId: 'u1',
+      pollOptions: null,
+    });
+  });
+
+  it('passes poll answers through to the repository in order', async () => {
+    const repository = mock<QuackRepository>();
+    repository.createQuack.mockResolvedValue(aQuack());
+
+    const service = new QuacksService(repository);
+    const user = { id: 'u1' } as Identity;
+
+    await service.createQuack(user, {
+      text: 'Where do we go for lunch?',
+      poll: { options: ['Pizza', 'Thai', 'Salad bar'] },
+    });
+
+    expect(repository.createQuack).toHaveBeenCalledWith({
+      text: 'Where do we go for lunch?',
+      mood: null,
+      userId: 'u1',
+      pollOptions: ['Pizza', 'Thai', 'Salad bar'],
     });
   });
 });

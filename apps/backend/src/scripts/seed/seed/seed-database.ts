@@ -86,7 +86,12 @@ export const seedDatabase = async (
 
   // Listed oldest first. The feed sorts newest first, so the last entry here is
   // the one at the top of the screen.
-  const exampleQuacks: { author: User; minutesAgo: number; text: string }[] = [
+  const exampleQuacks: {
+    author: User;
+    minutesAgo: number;
+    text: string;
+    poll?: { options: string[]; votes: { voter: User; option: string }[] };
+  }[] = [
     {
       author: pondAdmin,
       minutesAgo: 2870,
@@ -155,6 +160,21 @@ ducks: assemble like the Avengers
 i fear i may have started something`,
     },
     {
+      author: caffeinatedDuck,
+      minutesAgo: 50,
+      text: `Where do we go for lunch?`,
+      poll: {
+        options: ['Pizza', 'Thai', 'Salad bar'],
+        // The author votes too, and one answer stays at zero so the empty bar shows.
+        votes: [
+          { voter: caffeinatedDuck, option: 'Pizza' },
+          { voter: breadCritic, option: 'Pizza' },
+          { voter: pondAdmin, option: 'Pizza' },
+          { voter: deepDuckThoughts, option: 'Thai' },
+        ],
+      },
+    },
+    {
       author: pondAdmin,
       minutesAgo: 20,
       text: `The bread situation has been resolved. The swan has been spoken to.
@@ -164,11 +184,18 @@ Please stop tagging me.`,
 
   const now = Date.now();
 
-  for (const { author, minutesAgo, text } of exampleQuacks) {
+  for (const { author, minutesAgo, text, poll } of exampleQuacks) {
     await createQuack(prisma, {
       text,
       userId: author.id,
       createdAt: new Date(now - minutesAgo * MINUTE_IN_MS),
+      poll: poll && {
+        options: poll.options,
+        votes: poll.votes.map(({ voter, option }) => ({
+          userId: voter.id,
+          option,
+        })),
+      },
     });
   }
 };
