@@ -21,3 +21,15 @@ export const POLL_OPTION_MAX_LENGTH = 80;
 /** Two answers are duplicates when they match after trimming and ignoring case. */
 export const normalisePollOption = (option: string): string =>
   option.trim().toLowerCase();
+
+export class PollNotFoundError extends Error {
+  constructor(pollId: string) {
+    super(`Poll "${pollId}" does not exist`);
+  }
+}
+
+export class OptionNotInPollError extends Error {
+  constructor(optionId: string, pollId: string) {
+    super(`Answer "${optionId}" is not part of poll "${pollId}"`);
+  }
+}

@@ -1,47 +1,24 @@
 import { PrismaService } from '@/core/prisma/prisma.service';
 import { Prisma } from '@/generated/prisma/client';
-import { Poll } from '@/modules/poll/domain/poll';
+import {
+  mapPrismaPollToDomain,
+  pollInclude,
+} from '@/modules/poll/repositories/poll.prisma';
 import { Quack, QuackMood } from '@/modules/quack/domain/quack';
 import { Injectable } from '@nestjs/common';
 
-// Loads a quack's author and poll in the same query. Counts come from COUNT()
-// over poll_vote, never a stored counter, and the only vote row loaded is the
-// viewer's own — nobody else's vote leaves the database.
+// Loads a quack's author and its poll, as the viewer sees it, in the same query.
 // The return type is inferred on purpose: Prisma derives the row type from it.
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const quackInclude = (viewerId: string) =>
   ({
     user: true,
-    poll: {
-      include: {
-        options: {
-          orderBy: { position: 'asc' },
-          include: { _count: { select: { votes: true } } },
-        },
-        votes: { where: { userId: viewerId }, select: { optionId: true } },
-      },
-    },
+    poll: { include: pollInclude(viewerId) },
   }) satisfies Prisma.QuackInclude;
 
 export type PrismaQuackWithRelations = Prisma.QuackGetPayload<{
   include: ReturnType<typeof quackInclude>;
 }>;
-
-const mapPrismaPollToDomain = (
-  poll: NonNullable<PrismaQuackWithRelations['poll']>,
-): Poll => {
-  const options = poll.options.map((option) => ({
-    id: option.id,
-    text: option.text,
-    voteCount: option._count.votes,
-  }));
-  return {
-    id: poll.id,
-    options,
-    totalVotes: options.reduce((sum, option) => sum + option.voteCount, 0),
-    myVoteOptionId: poll.votes[0]?.optionId ?? null,
-  };
-};
 
 const mapPrismaQuackToDomain = (quack: PrismaQuackWithRelations): Quack => ({
   id: quack.id,
