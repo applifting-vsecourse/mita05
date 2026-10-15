@@ -37,11 +37,58 @@ model Quack {
   mood      QuackMood?
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
+  poll      Poll?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @default(now()) @updatedAt
 
   @@index([userId])
   @@map("quack")
+}
+
+// A quack has zero or one poll. Polls can't be edited or closed, and vote
+// counts are never stored — they're counted from poll_vote so they can't drift.
+model Poll {
+  id        String       @id @default(cuid())
+  quack     Quack        @relation(fields: [quackId], references: [id], onDelete: Cascade)
+  quackId   String       @unique
+  options   PollOption[]
+  votes     PollVote[]
+  createdAt DateTime     @default(now())
+
+  @@map("poll")
+}
+
+model PollOption {
+  id       String     @id @default(cuid())
+  poll     Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  pollId   String
+  text     String     @db.VarChar(80)
+  // 0–3, the order the author typed the answers in
+  position Int
+  votes    PollVote[]
+
+  @@unique([pollId, position])
+  // Target for PollVote's composite foreign key, so a vote can only name an
+  // answer of the poll it belongs to.
+  @@unique([id, pollId])
+  @@map("poll_option")
+}
+
+model PollVote {
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  pollId    String
+  option    PollOption @relation(fields: [optionId, pollId], references: [id, pollId], onDelete: Cascade)
+  optionId  String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @default(now()) @updatedAt
+
+  // One person, one vote — enforced by the database. Changing a vote updates this row.
+  @@id([pollId, userId])
+  @@index([optionId])
+  @@index([userId])
+  @@map("poll_vote")
 }
 
 model Session {
@@ -93,24 +140,25 @@ model Verification {
 }
 
 model User {
-  id              String    @id
-  name            String
-  email           String
-  emailVerified   Boolean
-  image           String?   @db.Text
-  createdAt       DateTime
-  updatedAt       DateTime
-  sessions        Session[]
-  accounts        Account[]
-  quacks          Quack[]
-  role            UserRole  @default(user)
+  id            String     @id
+  name          String
+  email         String
+  emailVerified Boolean
+  image         String?    @db.Text
+  createdAt     DateTime
+  updatedAt     DateTime
+  sessions      Session[]
+  accounts      Account[]
+  quacks        Quack[]
+  pollVotes     PollVote[]
+  role          UserRole   @default(user)
 
   username        String? @db.VarChar(50)
   displayUsername String? @db.VarChar(50)
 
-  bio             String?    @db.VarChar(160)
+  bio         String?    @db.VarChar(160)
   // Preselected in the post form; null means no mood.
-  defaultMood     QuackMood?
+  defaultMood QuackMood?
 
   @@unique([email])
   @@unique([username])
