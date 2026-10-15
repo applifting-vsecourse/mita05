@@ -1,8 +1,28 @@
-import { render, screen, within } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import type { ReactNode } from "react"
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query"
+import { render as rtlRender, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { toast } from "sonner"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { pollSchema, type Poll } from "@/features/quack/api/quackSchemas"
+import { quackKeys } from "@/features/quack/api/quackKeys"
+import { pollSchema, type Poll, type Quack } from "@/features/quack/api/quackSchemas"
+import { votePoll } from "@/features/quack/api/votePoll"
+import { QuackList } from "@/features/quack/components/QuackList"
 import { QuackPoll, votePercent } from "@/features/quack/components/QuackPoll"
+import { VOTE_FAILED_MESSAGE } from "@/features/quack/hooks/useVote"
+
+vi.mock("@/features/quack/api/votePoll", () => ({ votePoll: vi.fn() }))
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }))
+
+// Voting needs a query client; each test gets a fresh one.
+const render = (ui: ReactNode) =>
+  rtlRender(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>)
+
+beforeEach(() => {
+  vi.mocked(votePoll).mockReset()
+  vi.mocked(toast.error).mockReset()
+})
 
 const poll = (overrides: Partial<Poll> = {}): Poll => ({
   id: "p1",
@@ -99,6 +119,112 @@ describe("QuackPoll", () => {
     render(<QuackPoll poll={poll()} />)
 
     expect(screen.queryByText("(your vote)")).not.toBeInTheDocument()
+  })
+})
+
+describe("QuackPoll voting", () => {
+  it("makes every answer a button, pressed only for your pick", () => {
+    render(<QuackPoll poll={poll({ myVoteOptionId: "o1" })} />)
+
+    expect(screen.getByRole("button", { name: /Pizza/ })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByRole("button", { name: /Thai/ })).toHaveAttribute("aria-pressed", "false")
+    expect(screen.getByRole("button", { name: /Salad bar/ })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    )
+  })
+
+  it("votes for the answer you click", async () => {
+    vi.mocked(votePoll).mockReturnValue(new Promise<Poll>(() => undefined))
+    render(<QuackPoll poll={poll()} />)
+
+    await userEvent.click(screen.getByRole("button", { name: /Thai/ }))
+
+    expect(votePoll).toHaveBeenCalledExactlyOnceWith({ pollId: "p1", optionId: "o2" })
+  })
+
+  it("can switch your vote to another answer", async () => {
+    vi.mocked(votePoll).mockReturnValue(new Promise<Poll>(() => undefined))
+    render(<QuackPoll poll={poll({ myVoteOptionId: "o1" })} />)
+
+    await userEvent.click(screen.getByRole("button", { name: /Salad bar/ }))
+
+    expect(votePoll).toHaveBeenCalledExactlyOnceWith({ pollId: "p1", optionId: "o3" })
+  })
+
+  it("sends nothing when you click the answer you already picked", async () => {
+    render(<QuackPoll poll={poll({ myVoteOptionId: "o1" })} />)
+
+    await userEvent.click(screen.getByRole("button", { name: /Pizza/ }))
+
+    expect(votePoll).not.toHaveBeenCalled()
+  })
+})
+
+// The poll inside a real feed query, so clicks go through the cache like in the app.
+describe("QuackPoll in the feed", () => {
+  const lunch: Quack = {
+    id: "q1",
+    text: "Where do we go for lunch?",
+    mood: null,
+    userId: "u1",
+    createdAt: new Date("2026-01-01T12:00:00Z"),
+    user: { id: "u1", name: "Caffeinated Duck", username: "CaffeinatedDuck" },
+    poll: poll(),
+  }
+
+  // The feed starts in the cache. The refetch after a vote never answers, so
+  // what's on screen comes from the vote itself (or its rollback), not a reload.
+  const fetchFeed = () => new Promise<Quack[]>(() => undefined)
+
+  function Feed() {
+    const { data = [] } = useQuery({
+      queryKey: quackKeys.list(""),
+      queryFn: fetchFeed,
+      staleTime: Infinity,
+    })
+    return <QuackList quacks={data} />
+  }
+
+  const renderFeed = () => {
+    const queryClient = new QueryClient()
+    queryClient.setQueryData(quackKeys.list(""), [lunch])
+    return rtlRender(
+      <QueryClientProvider client={queryClient}>
+        <Feed />
+      </QueryClientProvider>,
+    )
+  }
+
+  it("shows your vote at once, before the server answers", async () => {
+    vi.mocked(votePoll).mockReturnValue(new Promise<Poll>(() => undefined))
+    renderFeed()
+
+    await userEvent.click(screen.getByRole("button", { name: /Thai/ }))
+
+    expect(answer("Thai")).toHaveTextContent("Thai(your vote)2 votes · 40%")
+    expect(answer("Pizza")).toHaveTextContent("Pizza3 votes · 60%")
+    expect(screen.getByText("5 votes")).toBeInTheDocument()
+  })
+
+  it("puts the poll back and says so when the vote fails", async () => {
+    let failVote!: (error: Error) => void
+    vi.mocked(votePoll).mockReturnValue(
+      new Promise((_, reject) => {
+        failVote = reject
+      }),
+    )
+    renderFeed()
+
+    await userEvent.click(screen.getByRole("button", { name: /Thai/ }))
+    expect(answer("Thai")).toHaveTextContent("2 votes")
+
+    failVote(new Error("Network down"))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(VOTE_FAILED_MESSAGE))
+    expect(answer("Thai")).toHaveTextContent("Thai1 vote · 25%")
+    expect(screen.queryByText("(your vote)")).not.toBeInTheDocument()
+    expect(screen.getByText("4 votes")).toBeInTheDocument()
   })
 })
 

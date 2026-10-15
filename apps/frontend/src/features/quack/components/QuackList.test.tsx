@@ -1,4 +1,5 @@
 // Example component test — the pattern to copy for your own components.
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
@@ -58,23 +59,26 @@ describe("QuackList", () => {
   })
 
   it("shows the poll of a quack that has one, under its text", () => {
+    // A poll can be voted in, which needs a query client.
     render(
-      <QuackList
-        quacks={[
-          quack({
-            text: "Where do we go for lunch?",
-            poll: {
-              id: "p1",
-              options: [
-                { id: "o1", text: "Pizza", voteCount: 1 },
-                { id: "o2", text: "Thai", voteCount: 0 },
-              ],
-              totalVotes: 1,
-              myVoteOptionId: null,
-            },
-          }),
-        ]}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <QuackList
+          quacks={[
+            quack({
+              text: "Where do we go for lunch?",
+              poll: {
+                id: "p1",
+                options: [
+                  { id: "o1", text: "Pizza", voteCount: 1 },
+                  { id: "o2", text: "Thai", voteCount: 0 },
+                ],
+                totalVotes: 1,
+                myVoteOptionId: null,
+              },
+            }),
+          ]}
+        />
+      </QueryClientProvider>,
     )
 
     expect(screen.getByText("Where do we go for lunch?")).toBeInTheDocument()
