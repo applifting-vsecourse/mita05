@@ -107,12 +107,27 @@ export class QuackRepository {
     text: string;
     mood: QuackMood | null;
     userId: string;
+    /** Answers in display order, or null for a quack without a poll. */
+    pollOptions: string[] | null;
   }): Promise<Quack> {
     const quack = await this.prisma.quack.create({
       data: {
         text: createQuackData.text,
         mood: createQuackData.mood,
         user: { connect: { id: createQuackData.userId } },
+        // Nested so the quack, poll and answers are written together or not at all.
+        poll: createQuackData.pollOptions
+          ? {
+              create: {
+                options: {
+                  create: createQuackData.pollOptions.map((text, position) => ({
+                    text,
+                    position,
+                  })),
+                },
+              },
+            }
+          : undefined,
       },
       include: quackInclude(createQuackData.userId),
     });

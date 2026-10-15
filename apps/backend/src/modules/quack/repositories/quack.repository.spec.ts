@@ -187,3 +187,70 @@ describe('QuackRepository.getQuacks polls', () => {
     expect(quack.poll).toBeNull();
   });
 });
+
+describe('QuackRepository.createQuack', () => {
+  beforeEach(() => {
+    prisma.quack.create.mockResolvedValue(aPrismaQuack());
+  });
+
+  const createData = (): Prisma.QuackCreateArgs['data'] | undefined =>
+    prisma.quack.create.mock.calls[0][0]?.data;
+
+  it('creates the poll and its answers in the same write, in the order given', async () => {
+    await repository.createQuack({
+      text: 'Where do we go for lunch?',
+      mood: null,
+      userId: 'u1',
+      pollOptions: ['Pizza', 'Thai', 'Salad bar'],
+    });
+
+    expect(createData()?.poll).toEqual({
+      create: {
+        options: {
+          create: [
+            { text: 'Pizza', position: 0 },
+            { text: 'Thai', position: 1 },
+            { text: 'Salad bar', position: 2 },
+          ],
+        },
+      },
+    });
+  });
+
+  it('creates no poll when there are no answers', async () => {
+    await repository.createQuack({
+      text: 'hello',
+      mood: null,
+      userId: 'u1',
+      pollOptions: null,
+    });
+
+    expect(createData()?.poll).toBeUndefined();
+  });
+
+  it('returns the new quack with its poll loaded for the author', async () => {
+    prisma.quack.create.mockResolvedValue(
+      aPrismaQuack({
+        poll: {
+          ...aPrismaPoll(null),
+          options: aPrismaPoll(null).options.map((option) => ({
+            ...option,
+            _count: { votes: 0 },
+          })),
+        },
+      }),
+    );
+
+    const quack = await repository.createQuack({
+      text: 'Where do we go for lunch?',
+      mood: null,
+      userId: 'u1',
+      pollOptions: ['Pizza', 'Thai', 'Salad bar'],
+    });
+
+    expect(prisma.quack.create.mock.calls[0][0]?.include).toMatchObject({
+      poll: { include: { votes: { where: { userId: 'u1' } } } },
+    });
+    expect(quack.poll).toMatchObject({ totalVotes: 0, myVoteOptionId: null });
+  });
+});

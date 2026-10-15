@@ -90,6 +90,7 @@ describe('QuacksService', () => {
       text: 'hello',
       mood: null,
       userId: 'u1',
+      pollOptions: null,
     });
   });
 
@@ -106,6 +107,27 @@ describe('QuacksService', () => {
       text: 'hello',
       mood: 'silly',
       userId: 'u1',
+      pollOptions: null,
+    });
+  });
+
+  it('passes poll answers through to the repository in order', async () => {
+    const repository = mock<QuackRepository>();
+    repository.createQuack.mockResolvedValue(aQuack());
+
+    const service = new QuacksService(repository);
+    const user = { id: 'u1' } as Identity;
+
+    await service.createQuack(user, {
+      text: 'Where do we go for lunch?',
+      poll: { options: ['Pizza', 'Thai', 'Salad bar'] },
+    });
+
+    expect(repository.createQuack).toHaveBeenCalledWith({
+      text: 'Where do we go for lunch?',
+      mood: null,
+      userId: 'u1',
+      pollOptions: ['Pizza', 'Thai', 'Salad bar'],
     });
   });
 });

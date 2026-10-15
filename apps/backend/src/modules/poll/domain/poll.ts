@@ -13,3 +13,11 @@ export type Poll = {
   /** The viewer's own answer, or null if they haven't voted. Never anyone else's. */
   myVoteOptionId: string | null;
 };
+
+export const POLL_MIN_OPTIONS = 2;
+export const POLL_MAX_OPTIONS = 4;
+export const POLL_OPTION_MAX_LENGTH = 80;
+
+/** Two answers are duplicates when they match after trimming and ignoring case. */
+export const normalisePollOption = (option: string): string =>
+  option.trim().toLowerCase();
