@@ -69,4 +69,167 @@ describe("QuackForm", () => {
     await waitFor(() => expect(screen.getByLabelText("New quack")).toHaveValue(""))
     expect(screen.getByRole("radio", { name: "Sad" })).toHaveAttribute("aria-checked", "true")
   })
+
+  describe("poll", () => {
+    const answer = (n: number) => screen.getByLabelText(`Answer ${n}`)
+    const quack = () => userEvent.click(screen.getByRole("button", { name: "Quack" }))
+    const sent = () => vi.mocked(addQuack).mock.calls[0]?.[0]
+
+    const writePoll = async (question: string, answers: string[]) => {
+      await userEvent.type(screen.getByLabelText("New quack"), question)
+      await userEvent.click(screen.getByRole("button", { name: "Add poll" }))
+      for (const [index, text] of answers.entries()) {
+        if (index >= 2) await userEvent.click(screen.getByRole("button", { name: "Add answer" }))
+        await userEvent.type(answer(index + 1), text)
+      }
+    }
+
+    it("starts without a poll", () => {
+      renderForm()
+
+      expect(screen.getByRole("button", { name: "Add poll" })).toBeInTheDocument()
+      expect(screen.queryByLabelText("Answer 1")).not.toBeInTheDocument()
+    })
+
+    it("adds a poll with two labelled answers that can't be removed", async () => {
+      renderForm()
+
+      await userEvent.click(screen.getByRole("button", { name: "Add poll" }))
+
+      expect(answer(1)).toHaveValue("")
+      expect(answer(2)).toHaveValue("")
+      expect(screen.queryByLabelText("Answer 3")).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /Remove answer/ })).not.toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Remove poll" })).toBeInTheDocument()
+    })
+
+    it("allows up to four answers", async () => {
+      renderForm()
+      await userEvent.click(screen.getByRole("button", { name: "Add poll" }))
+
+      await userEvent.click(screen.getByRole("button", { name: "Add answer" }))
+      await userEvent.click(screen.getByRole("button", { name: "Add answer" }))
+
+      expect(answer(4)).toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: "Add answer" })).not.toBeInTheDocument()
+      for (const n of [1, 2, 3, 4]) {
+        expect(screen.getByRole("button", { name: `Remove answer ${n}` })).toBeInTheDocument()
+      }
+    })
+
+    it("removes an answer, keeping the others, but never below two", async () => {
+      renderForm()
+      await writePoll("Lunch?", ["Pizza", "Thai", "Salad bar"])
+
+      await userEvent.click(screen.getByRole("button", { name: "Remove answer 2" }))
+
+      expect(answer(1)).toHaveValue("Pizza")
+      expect(answer(2)).toHaveValue("Salad bar")
+      expect(screen.queryByLabelText("Answer 3")).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /Remove answer/ })).not.toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Add answer" })).toBeInTheDocument()
+    })
+
+    it("posts the question with trimmed answers in order, and a mood", async () => {
+      vi.mocked(addQuack).mockResolvedValue({} as Awaited<ReturnType<typeof addQuack>>)
+      renderForm()
+      await writePoll("Where do we go for lunch?", ["  Pizza ", "Thai", "Salad bar"])
+      await userEvent.click(screen.getByRole("radio", { name: "Happy" }))
+
+      await quack()
+
+      await waitFor(() =>
+        expect(sent()).toEqual({
+          text: "Where do we go for lunch?",
+          mood: "happy",
+          poll: { options: ["Pizza", "Thai", "Salad bar"] },
+        }),
+      )
+    })
+
+    it("sends no poll at all without one", async () => {
+      renderForm()
+
+      await userEvent.type(screen.getByLabelText("New quack"), "hello")
+      await quack()
+
+      await waitFor(() => expect(addQuack).toHaveBeenCalledOnce())
+      expect(sent()).not.toHaveProperty("poll")
+    })
+
+    it("sends no poll after the poll is removed", async () => {
+      renderForm()
+      await writePoll("Lunch?", ["Pizza", "Thai"])
+
+      await userEvent.click(screen.getByRole("button", { name: "Remove poll" }))
+      await quack()
+
+      await waitFor(() => expect(addQuack).toHaveBeenCalledOnce())
+      expect(sent()).not.toHaveProperty("poll")
+      expect(screen.queryByLabelText("Answer 1")).not.toBeInTheDocument()
+    })
+
+    it.each([
+      ["an empty answer", "", "Write an answer"],
+      ["an answer of only spaces", "   ", "Write an answer"],
+      ["an answer over 80 characters", "a".repeat(81), "Keep answers under 80 characters"],
+      ["a repeat ignoring case and spaces", "  pizza ", "This answer is already in the poll"],
+    ])("rejects %s, with the message under that field", async (_, second, message) => {
+      renderForm()
+      await writePoll("Lunch?", ["Pizza"])
+      if (second) {
+        await userEvent.click(answer(2))
+        await userEvent.paste(second)
+      }
+
+      await quack()
+
+      await waitFor(() => expect(answer(2)).toHaveAccessibleDescription(message))
+      expect(answer(2)).toHaveAttribute("aria-invalid", "true")
+      expect(answer(1)).toHaveAttribute("aria-invalid", "false")
+      expect(addQuack).not.toHaveBeenCalled()
+    })
+
+    it("accepts an answer of exactly 80 characters", async () => {
+      vi.mocked(addQuack).mockResolvedValue({} as Awaited<ReturnType<typeof addQuack>>)
+      renderForm()
+      await writePoll("Lunch?", ["Pizza"])
+      await userEvent.click(answer(2))
+      await userEvent.paste("a".repeat(80))
+
+      await quack()
+
+      await waitFor(() =>
+        expect(sent()).toEqual({
+          text: "Lunch?",
+          mood: undefined,
+          poll: { options: ["Pizza", "a".repeat(80)] },
+        }),
+      )
+    })
+
+    it("clears the poll after a successful post", async () => {
+      vi.mocked(addQuack).mockResolvedValue({} as Awaited<ReturnType<typeof addQuack>>)
+      renderForm()
+      await writePoll("Lunch?", ["Pizza", "Thai"])
+
+      await quack()
+
+      await waitFor(() => expect(screen.getByLabelText("New quack")).toHaveValue(""))
+      expect(screen.queryByLabelText("Answer 1")).not.toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Add poll" })).toBeInTheDocument()
+    })
+
+    it("keeps the poll when posting fails", async () => {
+      vi.mocked(addQuack).mockRejectedValue(new Error("Server unreachable"))
+      renderForm()
+      await writePoll("Lunch?", ["Pizza", "Thai"])
+
+      await quack()
+
+      await waitFor(() => expect(screen.getByText("Server unreachable")).toBeInTheDocument())
+      expect(answer(1)).toHaveValue("Pizza")
+      expect(answer(2)).toHaveValue("Thai")
+    })
+  })
 })
