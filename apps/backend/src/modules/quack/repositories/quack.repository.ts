@@ -1,14 +1,49 @@
 import { PrismaService } from '@/core/prisma/prisma.service';
-import {
-  Quack as PrismaQuack,
-  User as PrismaUser,
-} from '@/generated/prisma/client';
+import { Prisma } from '@/generated/prisma/client';
+import { Poll } from '@/modules/poll/domain/poll';
 import { Quack, QuackMood } from '@/modules/quack/domain/quack';
 import { Injectable } from '@nestjs/common';
 
-const mapPrismaQuackToDomain = (
-  quack: PrismaQuack & { user?: PrismaUser },
-): Quack => ({
+// Loads a quack's author and poll in the same query. Counts come from COUNT()
+// over poll_vote, never a stored counter, and the only vote row loaded is the
+// viewer's own — nobody else's vote leaves the database.
+// The return type is inferred on purpose: Prisma derives the row type from it.
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+const quackInclude = (viewerId: string) =>
+  ({
+    user: true,
+    poll: {
+      include: {
+        options: {
+          orderBy: { position: 'asc' },
+          include: { _count: { select: { votes: true } } },
+        },
+        votes: { where: { userId: viewerId }, select: { optionId: true } },
+      },
+    },
+  }) satisfies Prisma.QuackInclude;
+
+export type PrismaQuackWithRelations = Prisma.QuackGetPayload<{
+  include: ReturnType<typeof quackInclude>;
+}>;
+
+const mapPrismaPollToDomain = (
+  poll: NonNullable<PrismaQuackWithRelations['poll']>,
+): Poll => {
+  const options = poll.options.map((option) => ({
+    id: option.id,
+    text: option.text,
+    voteCount: option._count.votes,
+  }));
+  return {
+    id: poll.id,
+    options,
+    totalVotes: options.reduce((sum, option) => sum + option.voteCount, 0),
+    myVoteOptionId: poll.votes[0]?.optionId ?? null,
+  };
+};
+
+const mapPrismaQuackToDomain = (quack: PrismaQuackWithRelations): Quack => ({
   id: quack.id,
   text: quack.text,
   mood: quack.mood,
@@ -22,6 +57,7 @@ const mapPrismaQuackToDomain = (
         username: quack.user.username ?? '',
       }
     : undefined,
+  poll: quack.poll ? mapPrismaPollToDomain(quack.poll) : null,
 });
 
 // Prisma's `contains` becomes ILIKE '%' || term || '%' without escaping,
@@ -37,8 +73,14 @@ const escapeLikeWildcards = (term: string): string =>
 export class QuackRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** With search terms, returns only quacks where every term appears in the text, author name or username. */
-  async getQuacks(searchTerms: string[] = []): Promise<Quack[]> {
+  /**
+   * With search terms, returns only quacks where every term appears in the text, author name or username.
+   * Poll answers are not searched. `viewerId` only decides whose vote is reported as `myVoteOptionId`.
+   */
+  async getQuacks(
+    viewerId: string,
+    searchTerms: string[] = [],
+  ): Promise<Quack[]> {
     const quacks = await this.prisma.quack.findMany({
       where: {
         AND: searchTerms.map((term) => {
@@ -55,7 +97,7 @@ export class QuackRepository {
           };
         }),
       },
-      include: { user: true },
+      include: quackInclude(viewerId),
       orderBy: { createdAt: 'desc' },
     });
     return quacks.map(mapPrismaQuackToDomain);
@@ -72,7 +114,7 @@ export class QuackRepository {
         mood: createQuackData.mood,
         user: { connect: { id: createQuackData.userId } },
       },
-      include: { user: true },
+      include: quackInclude(createQuackData.userId),
     });
     return mapPrismaQuackToDomain(quack);
   }

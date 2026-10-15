@@ -11,8 +11,8 @@ import { Injectable } from '@nestjs/common';
 export class QuacksService {
   constructor(private readonly quackRepository: QuackRepository) {}
 
-  async getQuacks(search?: string): Promise<Quack[]> {
-    return this.quackRepository.getQuacks(parseSearchTerms(search));
+  async getQuacks(viewer: Identity, search?: string): Promise<Quack[]> {
+    return this.quackRepository.getQuacks(viewer.id, parseSearchTerms(search));
   }
 
   async createQuack(

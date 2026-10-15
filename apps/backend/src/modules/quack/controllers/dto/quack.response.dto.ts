@@ -1,3 +1,4 @@
+import { PollResponseDto } from '@/modules/poll/controllers/dto/poll.response.dto';
 import {
   Quack,
   QUACK_MOODS,
@@ -35,10 +36,22 @@ export class QuackResponseDto {
   @ApiProperty({ type: QuackUserDto })
   user!: QuackUserDto;
 
+  @ApiProperty({
+    type: PollResponseDto,
+    nullable: true,
+    description: 'Null when the quack has no poll',
+  })
+  poll!: PollResponseDto | null;
+
   static fromDomain(quack: Quack): QuackResponseDto {
     if (!quack.user) {
       throw new Error(
         `QuackResponseDto.fromDomain expected quack.user to be loaded for quack ${quack.id}`,
+      );
+    }
+    if (quack.poll === undefined) {
+      throw new Error(
+        `QuackResponseDto.fromDomain expected quack.poll to be loaded for quack ${quack.id}`,
       );
     }
     return {
@@ -52,6 +65,7 @@ export class QuackResponseDto {
         name: quack.user.name,
         username: quack.user.username,
       },
+      poll: quack.poll ? PollResponseDto.fromDomain(quack.poll) : null,
     };
   }
 }
