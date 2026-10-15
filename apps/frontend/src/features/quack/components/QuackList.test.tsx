@@ -13,6 +13,7 @@ const quack = (overrides: Partial<Quack> = {}): Quack => ({
   userId: "u1",
   createdAt: new Date("2026-01-01T12:00:00Z"),
   user: { id: "u1", name: "Caffeinated Duck", username: "CaffeinatedDuck" },
+  poll: null,
   ...overrides,
 })
 
@@ -54,6 +55,38 @@ describe("QuackList", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Clear search" }))
     expect(onClearSearch).toHaveBeenCalledOnce()
+  })
+
+  it("shows the poll of a quack that has one, under its text", () => {
+    render(
+      <QuackList
+        quacks={[
+          quack({
+            text: "Where do we go for lunch?",
+            poll: {
+              id: "p1",
+              options: [
+                { id: "o1", text: "Pizza", voteCount: 1 },
+                { id: "o2", text: "Thai", voteCount: 0 },
+              ],
+              totalVotes: 1,
+              myVoteOptionId: null,
+            },
+          }),
+        ]}
+      />,
+    )
+
+    expect(screen.getByText("Where do we go for lunch?")).toBeInTheDocument()
+    expect(screen.getByRole("list", { name: "Poll answers" })).toBeInTheDocument()
+    expect(screen.getByText("Pizza")).toBeInTheDocument()
+  })
+
+  it("shows no poll for a quack without one", () => {
+    render(<QuackList quacks={[quack()]} />)
+
+    expect(screen.queryByRole("list", { name: "Poll answers" })).not.toBeInTheDocument()
+    expect(screen.queryByText("No votes yet")).not.toBeInTheDocument()
   })
 
   it("shows the regular empty state without a search", () => {
