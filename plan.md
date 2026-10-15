@@ -160,3 +160,24 @@ None of these block the build. Say if you disagree:
 
 - Duplicate answers are compared trimmed and ignoring case.
 - When several votes for one poll are queued and an _earlier_ one fails, its rollback briefly shows the state before that click. The queued later vote then runs and the final refetch corrects it. Fixing this properly would add complexity the first version doesn't need.
+
+## Deviations from plan
+
+What was built differs from the sections above in these ways:
+
+- **Poll UI lives in `features/quack/`, not `features/poll/`.** The lint rules let a feature import only from itself, and `QuackItem` renders the poll. `QuackPoll`, `QuackPollFields`, `useVote`, `votePoll` and `applyVote` are all there.
+- **Answers became buttons only in step 6.** In step 5 they were a read-only list, so nothing looked clickable before it worked.
+- **Shared `poll.prisma.ts`.** The poll `include` and its mapper live in `apps/backend/src/modules/poll/repositories/poll.prisma.ts`. The quack feed and the vote endpoint both use it, so they report the same numbers.
+- **Composer schema in `quackFormSchema.ts`.** It moved out of `QuackForm.tsx` so `QuackForm` and `QuackPollFields` can share it without an import cycle. Answers are `{ value }` objects because `useFieldArray` needs objects.
+- **Composer controls.** "Add poll" and "Remove poll" are one button whose label flips, so focus stays put. While there are more than 2 answers, _every_ answer has a remove button, not only those past the second.
+- **Votes, backend.**
+  - Prisma runs the upsert as one `INSERT … ON CONFLICT`, so the `P2002` retry is only a backstop.
+  - The database's foreign-key refusal (`P2003`) is also turned into a `400`.
+  - There's an extra index on `poll_vote(userId)`.
+- **Votes, frontend.** A finished vote writes the server's counts only if no later vote for that poll is still queued, tracked by the mutation key `quackKeys.vote(pollId)`.
+- **Messages.** The form's messages are worded for users and differ from the API's; the rules are the same. The API prefixes nested errors with `poll.`.
+- **Tests not in the repo.**
+  - Six database-level vote behaviours were checked only by scripts against a throwaway Postgres: concurrent first votes leave one row, a changed vote moves the count, a repeated vote changes nothing, the author can vote, a vote naming another poll's answer is refused, and the total equals the number of rows. The backend unit tests mock Prisma.
+  - No backend test sends a poll together with a mood; only the frontend tests that.
+  - `polls.controller.spec.ts` stubs `AuthenticatedUserGuard`, because Jest can't load the email templates the guard imports.
+- Full `pnpm check-all` runs in CI on the pull request; the checklist in the running app was done by hand.
