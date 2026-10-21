@@ -16,6 +16,8 @@ type QuackListProps = {
   onClearSearch?: () => void
   /** The signed-in user, whose quacks get a Delete action. */
   viewerId?: string
+  /** The signed-in user is a moderator, so every quack gets a Delete action. */
+  isAdmin?: boolean
   /** The list is the viewer's own quacks — the empty state then invites them to write one. */
   isMine?: boolean
   onWriteFirstQuack?: () => void
@@ -29,6 +31,7 @@ export function QuackList({
   search,
   onClearSearch,
   viewerId,
+  isAdmin,
   isMine,
   onWriteFirstQuack,
 }: QuackListProps) {
@@ -105,6 +108,7 @@ export function QuackList({
           key={quack.id}
           quack={quack}
           isOwn={viewerId !== undefined && quack.userId === viewerId}
+          isAdmin={isAdmin}
         />
       ))}
     </div>

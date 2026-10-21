@@ -33,7 +33,7 @@ const theirs = quack("q2", "someone-else", "their quack")
 // what's on screen comes from the delete itself, not a reload.
 const fetchFeed = () => new Promise<Quack[]>(() => undefined)
 
-function Feed({ isMine = false }: { isMine?: boolean }) {
+function Feed({ isMine = false, isAdmin = false }: { isMine?: boolean; isAdmin?: boolean }) {
   const { data = [] } = useQuery({
     queryKey: quackKeys.list("", isMine),
     queryFn: fetchFeed,
@@ -43,18 +43,19 @@ function Feed({ isMine = false }: { isMine?: boolean }) {
     <QuackList
       quacks={data}
       viewerId={VIEWER_ID}
+      isAdmin={isAdmin}
     />
   )
 }
 
-const renderFeed = () => {
+const renderFeed = ({ isAdmin = false }: { isAdmin?: boolean } = {}) => {
   const queryClient = new QueryClient()
   // The same quack cached in the All and the Mine feed.
   queryClient.setQueryData(quackKeys.list(""), [mine, theirs])
   queryClient.setQueryData(quackKeys.list("", true), [mine])
   render(
     <QueryClientProvider client={queryClient}>
-      <Feed />
+      <Feed isAdmin={isAdmin} />
     </QueryClientProvider>,
   )
   return queryClient
@@ -74,6 +75,28 @@ describe("deleting a quack", () => {
     const theirQuack = screen.getByText("their quack").closest("article")
     expect(within(myQuack!).getByRole("button", { name: "Delete quack" })).toBeInTheDocument()
     expect(within(theirQuack!).queryByRole("button", { name: "Delete quack" })).toBeNull()
+  })
+
+  it("offers an admin Delete on everyone's quacks", () => {
+    renderFeed({ isAdmin: true })
+
+    const theirQuack = screen.getByText("their quack").closest("article")
+    expect(within(theirQuack!).getByRole("button", { name: "Delete quack" })).toBeInTheDocument()
+    expect(screen.getAllByRole("button", { name: "Delete quack" })).toHaveLength(2)
+  })
+
+  it("lets an admin delete someone else's quack with the same dialog", async () => {
+    vi.mocked(deleteQuack).mockResolvedValue()
+    renderFeed({ isAdmin: true })
+
+    const theirQuack = screen.getByText("their quack").closest("article")
+    await userEvent.click(within(theirQuack!).getByRole("button", { name: "Delete quack" }))
+    const dialog = screen.getByRole("alertdialog", { name: "Delete this quack?" })
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }))
+
+    await waitFor(() => expect(screen.queryByText("their quack")).not.toBeInTheDocument())
+    expect(vi.mocked(deleteQuack).mock.calls[0]?.[0]).toBe("q2")
+    expect(screen.getByText("my quack")).toBeInTheDocument()
   })
 
   it("offers no Delete when the viewer is unknown", () => {

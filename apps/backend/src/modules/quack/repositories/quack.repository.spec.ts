@@ -140,6 +140,15 @@ describe('QuackRepository.deleteQuack', () => {
     });
   });
 
+  it('deletes whoever wrote the quack when the author is null', async () => {
+    prisma.quack.deleteMany.mockResolvedValue({ count: 1 });
+
+    await expect(repository.deleteQuack('q1', null)).resolves.toBe(true);
+    expect(prisma.quack.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'q1' },
+    });
+  });
+
   it('reports false when nothing matched', async () => {
     prisma.quack.deleteMany.mockResolvedValue({ count: 0 });
 

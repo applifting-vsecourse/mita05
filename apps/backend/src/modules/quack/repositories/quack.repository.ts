@@ -124,13 +124,18 @@ export class QuackRepository {
   }
 
   /**
-   * Deletes the quack only if `userId` wrote it; its poll and votes go with it.
-   * Returns false when no such quack by that user exists.
+   * Deletes the quack only if `authorId` wrote it; its poll and votes go with it.
+   * `null` deletes it whoever wrote it, for moderators. Required, so every
+   * caller decides. Returns false when no such quack (by that author) exists.
    */
-  async deleteQuack(quackId: string, userId: string): Promise<boolean> {
+  async deleteQuack(
+    quackId: string,
+    authorId: string | null,
+  ): Promise<boolean> {
     // The author is part of the filter, so the delete itself enforces ownership.
     const { count } = await this.prisma.quack.deleteMany({
-      where: { id: quackId, userId },
+      where:
+        authorId === null ? { id: quackId } : { id: quackId, userId: authorId },
     });
     return count > 0;
   }

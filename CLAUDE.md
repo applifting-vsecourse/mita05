@@ -43,3 +43,7 @@ Prisma's `contains`, `startsWith` and `endsWith` become SQL `LIKE` and do **not*
 ### Check permissions on the server
 
 Every endpoint that changes or deletes data checks in the service that the user from `@User()` may do it, and refuses otherwise (the service throws a domain error, the controller turns it into `ForbiddenException`, 403). Hiding a button in the UI is not a check. The current user always comes from the session, never from the body or the URL.
+
+### Test permissions on the server's answer, not only the screen
+
+An E2E test for a permission asserts the HTTP status of the request (403 for a refused user, 2xx for an allowed one), not just that something appeared or disappeared. A check on the screen alone can pass while the server refuses. Review the test by switching the check off: it must fail.

@@ -12,9 +12,11 @@ type QuackItemProps = {
   quack: Quack
   /** The viewer wrote it, so they may delete it. The server checks this again. */
   isOwn?: boolean
+  /** The viewer is a moderator, who may delete any quack. The server checks this again. */
+  isAdmin?: boolean
 }
 
-export function QuackItem({ quack, isOwn }: QuackItemProps) {
+export function QuackItem({ quack, isOwn, isAdmin }: QuackItemProps) {
   const { name, username } = quack.user
 
   const initials = name
@@ -53,7 +55,7 @@ export function QuackItem({ quack, isOwn }: QuackItemProps) {
         ) : null}
       </div>
 
-      {isOwn ? <DeleteQuackButton quackId={quack.id} /> : null}
+      {isOwn || isAdmin ? <DeleteQuackButton quackId={quack.id} /> : null}
     </article>
   )
 }

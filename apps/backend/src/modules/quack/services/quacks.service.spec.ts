@@ -164,7 +164,31 @@ describe('QuacksService', () => {
   });
 
   describe('deleteQuack', () => {
-    const author = { id: 'u1' } as Identity;
+    const author = { id: 'u1', role: 'user' } as Identity;
+    const admin = { id: 'mod', role: 'admin' } as Identity;
+
+    it("lets an admin delete someone else's quack, without the author filter", async () => {
+      const repository = mock<QuackRepository>();
+      repository.getQuackAuthorId.mockResolvedValue('u1');
+      repository.deleteQuack.mockResolvedValue(true);
+
+      const service = new QuacksService(repository);
+
+      await expect(service.deleteQuack(admin, 'q1')).resolves.toBeUndefined();
+      expect(repository.deleteQuack).toHaveBeenCalledWith('q1', null);
+    });
+
+    it('reports an unknown quack as not found, for admins too', async () => {
+      const repository = mock<QuackRepository>();
+      repository.getQuackAuthorId.mockResolvedValue(null);
+
+      const service = new QuacksService(repository);
+
+      await expect(service.deleteQuack(admin, 'nope')).rejects.toThrow(
+        QuackNotFoundError,
+      );
+      expect(repository.deleteQuack).not.toHaveBeenCalled();
+    });
 
     it("deletes the user's own quack", async () => {
       const repository = mock<QuackRepository>();
