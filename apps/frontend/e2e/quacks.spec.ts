@@ -38,3 +38,26 @@ test("nobody can delete someone else's quack", async ({ page }) => {
   const response = await page.request.delete(`${API}/quacks/${notMine.id}`)
   expect(response.status()).toBe(403)
 })
+
+test("admin can delete someone else's quack", async ({ browser }) => {
+  const text = `Spam ${Date.now()}`
+  const author = await browser.newPage()
+  await signIn(author, "caffeinatedduck@example.com", "password1")
+  await author.request.post(`${API}/quacks`, { data: { text } })
+
+  const admin = await browser.newPage()
+  await signIn(admin, "admin@example.com", "adminpassword")
+  await admin.goto("/quacks")
+
+  const quack = admin.getByRole("article").filter({ hasText: text })
+  await expect(quack).toBeVisible()
+  await quack.getByRole("button", { name: "Delete quack" }).click()
+  const [response] = await Promise.all([
+    admin.waitForResponse(
+      (r) => r.request().method() === "DELETE" && r.url().includes("/quacks/"),
+    ),
+    admin.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click(),
+  ])
+  expect(response.ok()).toBe(true)
+  await expect(quack).toHaveCount(0)
+})
