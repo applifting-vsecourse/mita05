@@ -113,6 +113,58 @@ describe('QuackRepository.getQuacks', () => {
       ],
     });
   });
+
+  it("returns only the author's quacks when given an author", async () => {
+    await repository.getQuacks(VIEWER_ID, ['lunch'], 'u1');
+
+    expect(findManyWhere()).toEqual({
+      userId: 'u1',
+      AND: [matchesAnywhere('lunch')],
+    });
+  });
+
+  it('does not filter by author without one', async () => {
+    await repository.getQuacks(VIEWER_ID);
+
+    expect(findManyWhere()?.userId).toBeUndefined();
+  });
+});
+
+describe('QuackRepository.deleteQuack', () => {
+  it('deletes only when the given user wrote the quack', async () => {
+    prisma.quack.deleteMany.mockResolvedValue({ count: 1 });
+
+    await expect(repository.deleteQuack('q1', 'u1')).resolves.toBe(true);
+    expect(prisma.quack.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'q1', userId: 'u1' },
+    });
+  });
+
+  it('reports false when nothing matched', async () => {
+    prisma.quack.deleteMany.mockResolvedValue({ count: 0 });
+
+    await expect(repository.deleteQuack('q1', 'someone-else')).resolves.toBe(
+      false,
+    );
+  });
+});
+
+describe('QuackRepository.getQuackAuthorId', () => {
+  it("returns the author's id", async () => {
+    prisma.quack.findUnique.mockResolvedValue(aPrismaQuack({ userId: 'u1' }));
+
+    await expect(repository.getQuackAuthorId('q1')).resolves.toBe('u1');
+    expect(prisma.quack.findUnique).toHaveBeenCalledWith({
+      where: { id: 'q1' },
+      select: { userId: true },
+    });
+  });
+
+  it('returns null for an unknown quack', async () => {
+    prisma.quack.findUnique.mockResolvedValue(null);
+
+    await expect(repository.getQuackAuthorId('nope')).resolves.toBeNull();
+  });
 });
 
 describe('QuackRepository.getQuacks polls', () => {

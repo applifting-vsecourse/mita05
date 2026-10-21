@@ -99,6 +99,36 @@ describe("QuackList", () => {
     expect(screen.getByText("No quacks yet. Post the first one.")).toBeInTheDocument()
   })
 
+  it("invites me to write my first quack when Mine is empty", async () => {
+    const onWriteFirstQuack = vi.fn()
+    render(
+      <QuackList
+        quacks={[]}
+        isMine
+        onWriteFirstQuack={onWriteFirstQuack}
+      />,
+    )
+
+    expect(screen.getByText("You haven't posted any quacks yet.")).toBeInTheDocument()
+    expect(screen.queryByText(/no quacks yet/i)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Write your first quack" }))
+    expect(onWriteFirstQuack).toHaveBeenCalledOnce()
+  })
+
+  it("says a search found nothing, even in Mine", () => {
+    render(
+      <QuackList
+        quacks={[]}
+        isMine
+        search="xyz"
+      />,
+    )
+
+    expect(screen.getByText("No quacks match 'xyz'.")).toBeInTheDocument()
+    expect(screen.queryByText("You haven't posted any quacks yet.")).not.toBeInTheDocument()
+  })
+
   it("shows an error with a working reload button", async () => {
     const onReload = vi.fn()
     render(

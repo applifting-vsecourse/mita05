@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ListQuacksQueryDto {
   @ApiPropertyOptional({
@@ -13,4 +13,12 @@ export class ListQuacksQueryDto {
   // A search longer than the longest possible quack can't match its text anyway.
   @MaxLength(280)
   q?: string;
+
+  @ApiPropertyOptional({
+    description: 'Only quacks written by the signed-in user',
+    enum: ['me'],
+  })
+  @IsOptional()
+  @IsIn(['me'])
+  author?: 'me';
 }

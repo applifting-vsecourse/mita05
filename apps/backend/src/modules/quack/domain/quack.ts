@@ -31,3 +31,15 @@ export type Quack = {
   /** Undefined when not loaded; null when the quack has no poll. */
   poll?: Poll | null;
 };
+
+export class QuackNotFoundError extends Error {
+  constructor(quackId: string) {
+    super(`Quack "${quackId}" does not exist`);
+  }
+}
+
+export class QuackNotOwnedError extends Error {
+  constructor(quackId: string) {
+    super(`Quack "${quackId}" belongs to someone else`);
+  }
+}
