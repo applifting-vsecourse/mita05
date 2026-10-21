@@ -14,7 +14,7 @@ jest.mock('@/shared/auth/guards/authenticated-user.guard', () => ({
   AuthenticatedUserGuard: class {},
 }));
 
-const user = { id: 'u1' } as Identity;
+const user = { id: 'u1', role: 'user' } as Identity;
 
 describe('QuacksController.list', () => {
   it("lists only the user's quacks for author=me", async () => {
@@ -57,6 +57,17 @@ describe('QuacksController.delete', () => {
     await expect(
       new QuacksController(service).delete(user, 'nope'),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it("lets an admin delete someone else's quack", async () => {
+    const admin = { id: 'mod', role: 'admin' } as Identity;
+    const service = mock<QuacksService>();
+    service.deleteQuack.mockResolvedValue();
+
+    await expect(
+      new QuacksController(service).delete(admin, 'q1'),
+    ).resolves.toBeUndefined();
+    expect(service.deleteQuack).toHaveBeenCalledWith(admin, 'q1');
   });
 
   it("answers 403 for someone else's quack", async () => {

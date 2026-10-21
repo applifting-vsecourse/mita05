@@ -44,7 +44,8 @@ export class QuacksService {
   }
 
   /**
-   * Deletes a quack the user wrote, with its poll and votes.
+   * Deletes a quack with its poll and votes. Authors may delete their own
+   * quacks; admins (moderators) may delete anyone's.
    * Throws QuackNotFoundError or QuackNotOwnedError.
    */
   async deleteQuack(user: Identity, quackId: string): Promise<void> {
@@ -52,13 +53,18 @@ export class QuacksService {
     if (authorId === null) {
       throw new QuackNotFoundError(quackId);
     }
-    if (authorId !== user.id) {
+    // The role comes from the session user, never from the request.
+    const isAdmin = user.role === 'admin';
+    if (authorId !== user.id && !isAdmin) {
       throw new QuackNotOwnedError(quackId);
     }
 
-    // The repository re-checks the author, so this can't delete someone else's quack.
-    // False here means it was deleted in the meantime.
-    const isDeleted = await this.quackRepository.deleteQuack(quackId, user.id);
+    // For non-admins the repository re-checks the author, so this can't delete
+    // someone else's quack. False here means it was deleted in the meantime.
+    const isDeleted = await this.quackRepository.deleteQuack(
+      quackId,
+      isAdmin ? null : user.id,
+    );
     if (!isDeleted) {
       throw new QuackNotFoundError(quackId);
     }
