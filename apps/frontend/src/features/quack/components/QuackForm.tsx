@@ -27,6 +27,13 @@ import {
 import { QuackPollFields } from "@/features/quack/components/QuackPollFields"
 import { useAddQuack } from "@/features/quack/hooks/useAddQuack"
 
+const QUACK_FORM_ID = "quack-form"
+
+/** Puts the cursor in the composer, e.g. from an empty feed that invites a first quack. */
+export function focusQuackComposer() {
+  document.querySelector<HTMLTextAreaElement>(`#${QUACK_FORM_ID} textarea[name="text"]`)?.focus()
+}
+
 type QuackFormProps = {
   className?: string
   /** Preselected for every new quack, including the next one after posting. */
@@ -67,6 +74,7 @@ export function QuackForm({ className, defaultMood }: QuackFormProps) {
   return (
     <Form {...form}>
       <form
+        id={QUACK_FORM_ID}
         noValidate
         onSubmit={form.handleSubmit(handleSubmit)}
         className={cn("space-y-3", className)}

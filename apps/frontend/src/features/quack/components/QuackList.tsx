@@ -14,6 +14,11 @@ type QuackListProps = {
   /** The active search, if any — the empty state then says nothing matched. */
   search?: string
   onClearSearch?: () => void
+  /** The signed-in user, whose quacks get a Delete action. */
+  viewerId?: string
+  /** The list is the viewer's own quacks — the empty state then invites them to write one. */
+  isMine?: boolean
+  onWriteFirstQuack?: () => void
 }
 
 export function QuackList({
@@ -23,6 +28,9 @@ export function QuackList({
   onReload,
   search,
   onClearSearch,
+  viewerId,
+  isMine,
+  onWriteFirstQuack,
 }: QuackListProps) {
   return (
     <div className="flex flex-col">
@@ -70,6 +78,21 @@ export function QuackList({
               </Button>
             ) : null}
           </div>
+        ) : isMine ? (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <p className="text-center text-sm text-muted-foreground">
+              You haven&apos;t posted any quacks yet.
+            </p>
+            {onWriteFirstQuack ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onWriteFirstQuack}
+              >
+                Write your first quack
+              </Button>
+            ) : null}
+          </div>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground">
             No quacks yet. Post the first one.
@@ -81,6 +104,7 @@ export function QuackList({
         <QuackItem
           key={quack.id}
           quack={quack}
+          isOwn={viewerId !== undefined && quack.userId === viewerId}
         />
       ))}
     </div>

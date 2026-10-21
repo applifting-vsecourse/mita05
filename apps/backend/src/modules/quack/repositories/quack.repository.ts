@@ -53,13 +53,16 @@ export class QuackRepository {
   /**
    * With search terms, returns only quacks where every term appears in the text, author name or username.
    * Poll answers are not searched. `viewerId` only decides whose vote is reported as `myVoteOptionId`.
+   * With `authorId`, returns only that user's quacks.
    */
   async getQuacks(
     viewerId: string,
     searchTerms: string[] = [],
+    authorId?: string,
   ): Promise<Quack[]> {
     const quacks = await this.prisma.quack.findMany({
       where: {
+        userId: authorId,
         AND: searchTerms.map((term) => {
           const contains = {
             contains: escapeLikeWildcards(term),
@@ -109,5 +112,26 @@ export class QuackRepository {
       include: quackInclude(createQuackData.userId),
     });
     return mapPrismaQuackToDomain(quack);
+  }
+
+  /** Returns the id of the quack's author, or null when the quack does not exist. */
+  async getQuackAuthorId(quackId: string): Promise<string | null> {
+    const quack = await this.prisma.quack.findUnique({
+      where: { id: quackId },
+      select: { userId: true },
+    });
+    return quack?.userId ?? null;
+  }
+
+  /**
+   * Deletes the quack only if `userId` wrote it; its poll and votes go with it.
+   * Returns false when no such quack by that user exists.
+   */
+  async deleteQuack(quackId: string, userId: string): Promise<boolean> {
+    // The author is part of the filter, so the delete itself enforces ownership.
+    const { count } = await this.prisma.quack.deleteMany({
+      where: { id: quackId, userId },
+    });
+    return count > 0;
   }
 }

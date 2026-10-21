@@ -1,6 +1,10 @@
 // Example unit test — the pattern to copy for your own services.
 // The repository is mocked, so the test exercises the service in isolation.
-import { Quack } from '@/modules/quack/domain/quack';
+import {
+  Quack,
+  QuackNotFoundError,
+  QuackNotOwnedError,
+} from '@/modules/quack/domain/quack';
 import { QuackRepository } from '@/modules/quack/repositories/quack.repository';
 import { Identity } from '@/shared/auth/domain/identity';
 import { mock } from 'jest-mock-extended';
@@ -30,7 +34,23 @@ describe('QuacksService', () => {
     await expect(service.getQuacks(viewer)).resolves.toEqual(quacks);
     expect(repository.getQuacks).toHaveBeenCalledTimes(1);
     // the viewer decides whose vote is reported as "my vote" in each poll
-    expect(repository.getQuacks).toHaveBeenCalledWith('viewer', []);
+    expect(repository.getQuacks).toHaveBeenCalledWith('viewer', [], undefined);
+  });
+
+  it("lists only the viewer's own quacks when asked", async () => {
+    const repository = mock<QuackRepository>();
+    repository.getQuacks.mockResolvedValue([]);
+
+    const service = new QuacksService(repository);
+
+    await service.getQuacks(viewer, 'lunch', true);
+
+    // the author is the viewer from the session, never one named by the caller
+    expect(repository.getQuacks).toHaveBeenCalledWith(
+      'viewer',
+      ['lunch'],
+      'viewer',
+    );
   });
 
   it('splits a search into words that must all match', async () => {
@@ -41,10 +61,11 @@ describe('QuacksService', () => {
 
     await service.getQuacks(viewer, '  lunch   adela ');
 
-    expect(repository.getQuacks).toHaveBeenCalledWith('viewer', [
-      'lunch',
-      'adela',
-    ]);
+    expect(repository.getQuacks).toHaveBeenCalledWith(
+      'viewer',
+      ['lunch', 'adela'],
+      undefined,
+    );
   });
 
   it('ignores a leading @ so @handle finds the username', async () => {
@@ -55,10 +76,11 @@ describe('QuacksService', () => {
 
     await service.getQuacks(viewer, '@ada lunch@noon');
 
-    expect(repository.getQuacks).toHaveBeenCalledWith('viewer', [
-      'ada',
-      'lunch@noon',
-    ]);
+    expect(repository.getQuacks).toHaveBeenCalledWith(
+      'viewer',
+      ['ada', 'lunch@noon'],
+      undefined,
+    );
   });
 
   it('treats a blank search as no search', async () => {
@@ -70,8 +92,18 @@ describe('QuacksService', () => {
     await service.getQuacks(viewer, '   ');
     await service.getQuacks(viewer, '@');
 
-    expect(repository.getQuacks).toHaveBeenNthCalledWith(1, 'viewer', []);
-    expect(repository.getQuacks).toHaveBeenNthCalledWith(2, 'viewer', []);
+    expect(repository.getQuacks).toHaveBeenNthCalledWith(
+      1,
+      'viewer',
+      [],
+      undefined,
+    );
+    expect(repository.getQuacks).toHaveBeenNthCalledWith(
+      2,
+      'viewer',
+      [],
+      undefined,
+    );
   });
 
   it('creates a quack owned by the signed-in user', async () => {
@@ -128,6 +160,57 @@ describe('QuacksService', () => {
       mood: null,
       userId: 'u1',
       pollOptions: ['Pizza', 'Thai', 'Salad bar'],
+    });
+  });
+
+  describe('deleteQuack', () => {
+    const author = { id: 'u1' } as Identity;
+
+    it("deletes the user's own quack", async () => {
+      const repository = mock<QuackRepository>();
+      repository.getQuackAuthorId.mockResolvedValue('u1');
+      repository.deleteQuack.mockResolvedValue(true);
+
+      const service = new QuacksService(repository);
+
+      await expect(service.deleteQuack(author, 'q1')).resolves.toBeUndefined();
+      expect(repository.deleteQuack).toHaveBeenCalledWith('q1', 'u1');
+    });
+
+    it("refuses to delete someone else's quack", async () => {
+      const repository = mock<QuackRepository>();
+      repository.getQuackAuthorId.mockResolvedValue('someone-else');
+
+      const service = new QuacksService(repository);
+
+      await expect(service.deleteQuack(author, 'q1')).rejects.toThrow(
+        QuackNotOwnedError,
+      );
+      expect(repository.deleteQuack).not.toHaveBeenCalled();
+    });
+
+    it('reports an unknown quack as not found', async () => {
+      const repository = mock<QuackRepository>();
+      repository.getQuackAuthorId.mockResolvedValue(null);
+
+      const service = new QuacksService(repository);
+
+      await expect(service.deleteQuack(author, 'nope')).rejects.toThrow(
+        QuackNotFoundError,
+      );
+      expect(repository.deleteQuack).not.toHaveBeenCalled();
+    });
+
+    it('reports a quack deleted in the meantime as not found', async () => {
+      const repository = mock<QuackRepository>();
+      repository.getQuackAuthorId.mockResolvedValue('u1');
+      repository.deleteQuack.mockResolvedValue(false);
+
+      const service = new QuacksService(repository);
+
+      await expect(service.deleteQuack(author, 'q1')).rejects.toThrow(
+        QuackNotFoundError,
+      );
     });
   });
 });

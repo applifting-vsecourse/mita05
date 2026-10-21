@@ -1,3 +1,7 @@
+import {
+  QuackNotFoundError,
+  QuackNotOwnedError,
+} from '@/modules/quack/domain/quack';
 import { QuacksService } from '@/modules/quack/services/quacks.service';
 import { User } from '@/shared/auth/decorators/user.decorator';
 import { Identity } from '@/shared/auth/domain/identity';
@@ -5,9 +9,13 @@ import { AuthenticatedUserGuard } from '@/shared/auth/guards/authenticated-user.
 import {
   Body,
   Controller,
+  Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
+  Param,
   Post,
   Query,
   UseGuards,
@@ -47,7 +55,11 @@ export class QuacksController {
     @User() user: Identity,
     @Query() query: ListQuacksQueryDto,
   ): Promise<QuackResponseDto[]> {
-    const quacks = await this.quacksService.getQuacks(user, query.q);
+    const quacks = await this.quacksService.getQuacks(
+      user,
+      query.q,
+      query.author === 'me',
+    );
     return quacks.map(QuackResponseDto.fromDomain);
   }
 
@@ -67,5 +79,29 @@ export class QuacksController {
       poll: body.poll,
     });
     return QuackResponseDto.fromDomain(quack);
+  }
+
+  @Delete(':quackId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete one of your own quacks' })
+  @ApiResponse({ status: 204, description: 'Deleted, with its poll' })
+  @ApiResponse({ status: 401, description: 'Not signed in' })
+  @ApiResponse({ status: 403, description: 'Quack belongs to someone else' })
+  @ApiResponse({ status: 404, description: 'Quack not found' })
+  async delete(
+    @User() user: Identity,
+    @Param('quackId') quackId: string,
+  ): Promise<void> {
+    try {
+      await this.quacksService.deleteQuack(user, quackId);
+    } catch (error) {
+      if (error instanceof QuackNotFoundError) {
+        throw new NotFoundException('Quack not found');
+      }
+      if (error instanceof QuackNotOwnedError) {
+        throw new ForbiddenException('You can only delete your own quacks');
+      }
+      throw error;
+    }
   }
 }

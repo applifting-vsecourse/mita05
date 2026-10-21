@@ -2,14 +2,19 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { formatDate } from "@/lib/date"
 
 import type { Quack } from "@/features/quack/api/quackSchemas"
+import { DeleteQuackButton } from "@/features/quack/components/DeleteQuackButton"
 import { QuackMoodLabel } from "@/features/quack/components/QuackMoodLabel"
 import { QuackPoll } from "@/features/quack/components/QuackPoll"
 import { UsersName } from "@/features/quack/components/UsersName"
 import { UsersUserName } from "@/features/quack/components/UsersUserName"
 
-type QuackItemProps = { quack: Quack }
+type QuackItemProps = {
+  quack: Quack
+  /** The viewer wrote it, so they may delete it. The server checks this again. */
+  isOwn?: boolean
+}
 
-export function QuackItem({ quack }: QuackItemProps) {
+export function QuackItem({ quack, isOwn }: QuackItemProps) {
   const { name, username } = quack.user
 
   const initials = name
@@ -47,6 +52,8 @@ export function QuackItem({ quack }: QuackItemProps) {
           />
         ) : null}
       </div>
+
+      {isOwn ? <DeleteQuackButton quackId={quack.id} /> : null}
     </article>
   )
 }
