@@ -19,7 +19,7 @@ import { useDeleteQuack } from "@/features/quack/hooks/useDeleteQuack"
 
 type DeleteQuackButtonProps = { quackId: string }
 
-/** Asks first, then deletes. Only render it on the viewer's own quacks. */
+/** Asks first, then deletes. Only render it on the viewer's own quacks, or on any quack for an admin. */
 export function DeleteQuackButton({ quackId }: DeleteQuackButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const deleteQuack = useDeleteQuack()

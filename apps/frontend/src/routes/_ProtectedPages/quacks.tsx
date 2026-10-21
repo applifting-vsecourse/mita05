@@ -42,7 +42,10 @@ function QuacksPage() {
   const navigate = Route.useNavigate()
   const quacksQuery = useQuery(quacksQueryOptions(search, isMine))
   const defaultMood = useQuery(profileQueryOptions()).data?.defaultMood ?? undefined
-  const viewerId = useSession().user?.id
+  const viewer = useSession().user
+  const viewerId = viewer?.id
+  // Only shows the Delete buttons; the server decides who may delete.
+  const isAdmin = viewer?.role === "admin"
 
   // Replace rather than push, so typing doesn't add a history entry per search.
   const setSearch = useCallback(
@@ -86,6 +89,7 @@ function QuacksPage() {
             search={search}
             onClearSearch={() => setSearch("")}
             viewerId={viewerId}
+            isAdmin={isAdmin}
             isMine={isMine}
             onWriteFirstQuack={focusQuackComposer}
           />
