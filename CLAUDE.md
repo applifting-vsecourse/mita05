@@ -39,3 +39,7 @@ Don't reach for the browser to check your own work. Tests and type-checks are th
 ### Escape user input in Prisma text filters
 
 Prisma's `contains`, `startsWith` and `endsWith` become SQL `LIKE` and do **not** escape `%` and `_`. Without escaping, a search for `%` matches every row. Pass user input through `escapeLikeWildcards` first (currently in `apps/backend/src/modules/quack/repositories/quack.repository.ts`), and test it with a term that contains `%`.
+
+### Check permissions on the server
+
+Every endpoint that changes or deletes data checks in the service that the user from `@User()` may do it, and refuses otherwise (the service throws a domain error, the controller turns it into `ForbiddenException`, 403). Hiding a button in the UI is not a check. The current user always comes from the session, never from the body or the URL.
