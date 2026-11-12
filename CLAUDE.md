@@ -26,6 +26,10 @@ Need a control that isn't in `src/components/ui/`? Add it with `pnpm dlx shadcn@
 
 The CLI puts `shadow-xs`/`shadow-sm` on inputs, textareas and cards. [`DESIGN.md`](DESIGN.md) keeps shadows for things that genuinely float — dialogs, dropdowns, toasts. Strip them.
 
+### Check the ADRs before changing the data model or app structure
+
+Before changing the data model or the structure of the app, check the index in [`docs/adr/README.md`](docs/adr/README.md).
+
 ### Check import boundaries before planning
 
 Before writing a plan, check the ESLint import boundaries: a feature can't import from another feature, so UI that renders something goes in the feature that renders it.

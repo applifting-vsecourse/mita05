@@ -1,10 +1,15 @@
 import {
+  CannotReplyToReplyError,
   QuackNotFoundError,
   QuackNotOwnedError,
 } from '@/modules/quack/domain/quack';
 import { QuacksService } from '@/modules/quack/services/quacks.service';
 import { Identity } from '@/shared/auth/domain/identity';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { mock } from 'jest-mock-extended';
 import { QuacksController } from './quacks.controller';
 
@@ -77,5 +82,44 @@ describe('QuacksController.delete', () => {
     await expect(
       new QuacksController(service).delete(user, 'q1'),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('QuacksController.reply', () => {
+  it('replies as the signed-in user', async () => {
+    const service = mock<QuacksService>();
+    service.createReply.mockResolvedValue({
+      id: 'r1',
+      text: 'hi',
+      userId: 'u1',
+      parentId: 'q1',
+      createdAt: new Date('2026-01-01T12:00:00Z'),
+      user: { id: 'u1', name: 'Duck', username: 'duck' },
+    });
+
+    const reply = await new QuacksController(service).reply(user, 'q1', {
+      text: 'hi',
+    });
+
+    expect(service.createReply).toHaveBeenCalledWith(user, 'q1', 'hi');
+    expect(reply).toMatchObject({ id: 'r1', parentId: 'q1', text: 'hi' });
+  });
+
+  it('turns a missing or deleted quack into 404', async () => {
+    const service = mock<QuacksService>();
+    service.createReply.mockRejectedValue(new QuackNotFoundError('q1'));
+
+    await expect(
+      new QuacksController(service).reply(user, 'q1', { text: 'hi' }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('turns a reply to a reply into 400', async () => {
+    const service = mock<QuacksService>();
+    service.createReply.mockRejectedValue(new CannotReplyToReplyError('r1'));
+
+    await expect(
+      new QuacksController(service).reply(user, 'r1', { text: 'hi' }),
+    ).rejects.toThrow(BadRequestException);
   });
 });

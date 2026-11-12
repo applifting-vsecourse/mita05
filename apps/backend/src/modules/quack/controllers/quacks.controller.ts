@@ -1,4 +1,5 @@
 import {
+  CannotReplyToReplyError,
   QuackNotFoundError,
   QuackNotOwnedError,
 } from '@/modules/quack/domain/quack';
@@ -7,6 +8,7 @@ import { User } from '@/shared/auth/decorators/user.decorator';
 import { Identity } from '@/shared/auth/domain/identity';
 import { AuthenticatedUserGuard } from '@/shared/auth/guards/authenticated-user.guard';
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -29,8 +31,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CreateQuackDto } from './dto/create-quack.dto';
+import { CreateReplyDto } from './dto/create-reply.dto';
 import { ListQuacksQueryDto } from './dto/list-quacks.query.dto';
-import { QuackResponseDto } from './dto/quack.response.dto';
+import { QuackResponseDto, ReplyResponseDto } from './dto/quack.response.dto';
 
 @ApiTags('quacks')
 @Controller('quacks')
@@ -81,12 +84,52 @@ export class QuacksController {
     return QuackResponseDto.fromDomain(quack);
   }
 
+  @Post(':quackId/replies')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Reply to a quack in the feed (text only)' })
+  @ApiResponse({ status: 201, type: ReplyResponseDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid reply (e.g. a mood or poll), or the quack is a reply',
+  })
+  @ApiResponse({ status: 401, description: 'Not signed in' })
+  @ApiResponse({ status: 404, description: 'Quack not found or deleted' })
+  async reply(
+    @User() user: Identity,
+    @Param('quackId') quackId: string,
+    @Body() body: CreateReplyDto,
+  ): Promise<ReplyResponseDto> {
+    try {
+      const reply = await this.quacksService.createReply(
+        user,
+        quackId,
+        body.text,
+      );
+      return ReplyResponseDto.fromDomain(reply);
+    } catch (error) {
+      if (error instanceof QuackNotFoundError) {
+        throw new NotFoundException('Quack not found');
+      }
+      if (error instanceof CannotReplyToReplyError) {
+        throw new BadRequestException(
+          "You can't reply to a reply. Reply to the quack instead.",
+        );
+      }
+      throw error;
+    }
+  }
+
   @Delete(':quackId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
-    summary: 'Delete one of your own quacks (admins: any quack)',
+    summary:
+      'Delete one of your own quacks or replies (admins: any). A quack with replies is kept as a placeholder with its content erased.',
   })
-  @ApiResponse({ status: 204, description: 'Deleted, with its poll' })
+  @ApiResponse({
+    status: 204,
+    description:
+      'Deleted with its poll, or, if it has replies, its text, mood and poll erased',
+  })
   @ApiResponse({ status: 401, description: 'Not signed in' })
   @ApiResponse({
     status: 403,

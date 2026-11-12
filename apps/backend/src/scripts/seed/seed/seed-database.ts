@@ -91,6 +91,9 @@ export const seedDatabase = async (
     minutesAgo: number;
     text: string;
     poll?: { options: string[]; votes: { voter: User; option: string }[] };
+    replies?: { author: User; minutesAgo: number; text: string }[];
+    // Deleted after its replies were written, so it shows as a placeholder.
+    isDeleted?: boolean;
   }[] = [
     {
       author: pondAdmin,
@@ -127,12 +130,50 @@ send help or more caffeine`,
       minutesAgo: 1240,
       text: `Update on the shortcut: it added 90 km and one entire mountain.
 We are not currently speaking to the front of the V.`,
+      replies: [
+        {
+          author: deepDuckThoughts,
+          minutesAgo: 1200,
+          text: `Perhaps the mountain was the shortcut all along.`,
+        },
+      ],
+    },
+    {
+      author: migrationSeason,
+      minutesAgo: 1100,
+      text: `Hot take: bread is overrated and the critic knows it.`,
+      replies: [
+        {
+          author: breadCritic,
+          minutesAgo: 1090,
+          text: `Deleting it won't save you. 0/10.`,
+        },
+        {
+          author: pondAdmin,
+          minutesAgo: 1080,
+          text: `Let's keep the pond civil, everyone.`,
+        },
+      ],
+      isDeleted: true,
     },
     {
       author: pondAdmin,
       minutesAgo: 890,
       text: `Whoever keeps rearranging the stones on the west bank — we see you.
 We have footage. It is extremely blurry footage. But we have it.`,
+      replies: [
+        {
+          author: caffeinatedDuck,
+          minutesAgo: 870,
+          text: `it wasn't me
+(it was me)`,
+        },
+        {
+          author: pondAdmin,
+          minutesAgo: 860,
+          text: `We know.`,
+        },
+      ],
     },
     {
       author: caffeinatedDuck,
@@ -173,6 +214,18 @@ i fear i may have started something`,
           { voter: deepDuckThoughts, option: 'Thai' },
         ],
       },
+      replies: [
+        {
+          author: breadCritic,
+          minutesAgo: 45,
+          text: `Pizza. I'll review the crust.`,
+        },
+        {
+          author: deepDuckThoughts,
+          minutesAgo: 30,
+          text: `Is lunch a place, or a state of mind?`,
+        },
+      ],
     },
     {
       author: pondAdmin,
@@ -184,7 +237,14 @@ Please stop tagging me.`,
 
   const now = Date.now();
 
-  for (const { author, minutesAgo, text, poll } of exampleQuacks) {
+  for (const {
+    author,
+    minutesAgo,
+    text,
+    poll,
+    replies,
+    isDeleted,
+  } of exampleQuacks) {
     await createQuack(prisma, {
       text,
       userId: author.id,
@@ -196,6 +256,12 @@ Please stop tagging me.`,
           option,
         })),
       },
+      replies: replies?.map((reply) => ({
+        text: reply.text,
+        userId: reply.author.id,
+        createdAt: new Date(now - reply.minutesAgo * MINUTE_IN_MS),
+      })),
+      isDeleted,
     });
   }
 };

@@ -8,13 +8,17 @@ type CreateQuackParams = {
   createdAt?: Date;
   // Answers in display order, and who voted for which answer.
   poll?: { options: string[]; votes: { userId: string; option: string }[] };
+  // Text-only replies under the quack, oldest first.
+  replies?: { text: string; userId: string; createdAt?: Date }[];
+  // Deletes the quack after its replies exist, so it stays as a tombstone.
+  isDeleted?: boolean;
 };
 
 export async function createQuack(
   prisma: PrismaService,
   params: CreateQuackParams,
 ): Promise<void> {
-  const { text, userId, createdAt, poll } = params;
+  const { text, userId, createdAt, poll, replies, isDeleted } = params;
 
   const quack = await prisma.quack.create({
     data: {
@@ -52,6 +56,32 @@ export async function createQuack(
         }
         return { pollId, optionId: option.id, userId: vote.userId };
       }),
+    });
+  }
+
+  for (const reply of replies ?? []) {
+    await prisma.quack.create({
+      data: {
+        text: reply.text,
+        userId: reply.userId,
+        parentId: quack.id,
+        createdAt: reply.createdAt,
+      },
+    });
+  }
+
+  if (isDeleted) {
+    if (!replies?.length) {
+      throw new Error(
+        'Seed: only a quack with replies can stay as a tombstone',
+      );
+    }
+    // What deleting a quack with replies does: erase the content, keep the row.
+    // See docs/adr/0001-deleted-quacks-become-tombstones.md.
+    await prisma.poll.deleteMany({ where: { quackId: quack.id } });
+    await prisma.quack.update({
+      where: { id: quack.id },
+      data: { text: null, mood: null, deletedAt: new Date() },
     });
   }
 }

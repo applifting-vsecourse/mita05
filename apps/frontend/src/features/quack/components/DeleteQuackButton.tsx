@@ -17,10 +17,28 @@ import { Button } from "@/components/ui/button"
 
 import { useDeleteQuack } from "@/features/quack/hooks/useDeleteQuack"
 
-type DeleteQuackButtonProps = { quackId: string }
+type DeleteQuackButtonProps = {
+  /** The quack or reply to delete. */
+  quackId: string
+  /** It's a reply, not a quack in the feed. */
+  isReply?: boolean
+  /** The quack has replies, so it stays as a placeholder instead of disappearing. */
+  hasReplies?: boolean
+}
 
-/** Asks first, then deletes. Only render it on the viewer's own quacks, or on any quack for an admin. */
-export function DeleteQuackButton({ quackId }: DeleteQuackButtonProps) {
+const describeDeletion = ({ isReply, hasReplies }: Omit<DeleteQuackButtonProps, "quackId">) => {
+  if (isReply) return "It disappears for everyone. This can't be undone."
+  if (hasReplies) {
+    return "Its text and poll are erased for everyone. The replies stay, under a note that the quack was deleted. This can't be undone."
+  }
+  return "It disappears from the feed for everyone, poll included. This can't be undone."
+}
+
+/**
+ * Asks first, then deletes. Only render it on the viewer's own quacks and replies,
+ * or on any of them for an admin.
+ */
+export function DeleteQuackButton({ quackId, isReply, hasReplies }: DeleteQuackButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const deleteQuack = useDeleteQuack()
 
@@ -41,7 +59,7 @@ export function DeleteQuackButton({ quackId }: DeleteQuackButtonProps) {
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Delete quack"
+          aria-label={isReply ? "Delete reply" : "Delete quack"}
           className="text-muted-foreground"
         >
           <Trash2 />
@@ -49,9 +67,11 @@ export function DeleteQuackButton({ quackId }: DeleteQuackButtonProps) {
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete this quack?</AlertDialogTitle>
+          <AlertDialogTitle>
+            {isReply ? "Delete this reply?" : "Delete this quack?"}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            It disappears from the feed for everyone, poll included. This can&apos;t be undone.
+            {describeDeletion({ isReply, hasReplies })}
           </AlertDialogDescription>
         </AlertDialogHeader>
 

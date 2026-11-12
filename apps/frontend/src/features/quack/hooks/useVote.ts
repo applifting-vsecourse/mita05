@@ -13,7 +13,9 @@ export const VOTE_FAILED_MESSAGE = "Your vote didn't go through, try again"
 function updatePollInFeeds(queryClient: QueryClient, pollId: string, update: (poll: Poll) => Poll) {
   queryClient.setQueriesData<Quack[]>({ queryKey: quackKeys.lists() }, (quacks) =>
     quacks?.map((quack) =>
-      quack.poll?.id === pollId ? { ...quack, poll: update(quack.poll) } : quack,
+      !quack.isDeleted && quack.poll?.id === pollId
+        ? { ...quack, poll: update(quack.poll) }
+        : quack,
     ),
   )
 }
