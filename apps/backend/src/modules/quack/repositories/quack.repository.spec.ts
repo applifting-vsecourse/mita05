@@ -22,6 +22,12 @@ const findManyInclude = (): Prisma.QuackInclude | null | undefined =>
 
 const VIEWER_ID = 'viewer';
 
+const prismaError = (code: string): Prisma.PrismaClientKnownRequestError =>
+  new Prisma.PrismaClientKnownRequestError(`Prisma ${code}`, {
+    code,
+    clientVersion: 'test',
+  });
+
 // A row as Prisma returns it for the repository's include.
 const aPrismaQuack = (
   overrides: Partial<PrismaQuackWithRelations> = {},
@@ -186,6 +192,89 @@ describe('QuackRepository.deleteQuack', () => {
     ).resolves.toBeNull();
     expect(prisma.quack.deleteMany).not.toHaveBeenCalled();
   });
+
+  it('turns a quack with replies into a tombstone: content and poll erased, row kept', async () => {
+    prisma.quack.findFirst.mockResolvedValue(aQuackToDelete(2));
+
+    await expect(repository.deleteQuack('q1', 'u1')).resolves.toBe(
+      'tombstoned',
+    );
+    expect(prisma.poll.deleteMany).toHaveBeenCalledWith({
+      where: { quackId: 'q1' },
+    });
+    expect(prisma.quack.update).toHaveBeenCalledWith({
+      where: { id: 'q1' },
+      data: { text: null, mood: null, deletedAt: expect.any(Date) },
+    });
+    expect(prisma.quack.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('never deletes a tombstone directly: it is not found', async () => {
+    prisma.quack.findFirst.mockResolvedValue(null);
+
+    await repository.deleteQuack('tombstone', null);
+
+    // deletedAt: null in the lookup is what keeps a tombstone out of reach.
+    expect(prisma.quack.findFirst.mock.calls[0][0]?.where).toMatchObject({
+      deletedAt: null,
+    });
+  });
+
+  it('removes a tombstone left without replies when its last reply is deleted', async () => {
+    prisma.quack.findFirst.mockResolvedValue(aQuackToDelete(0, 'parent'));
+
+    await expect(repository.deleteQuack('r1', 'u2')).resolves.toBe('deleted');
+    expect(prisma.quack.deleteMany).toHaveBeenNthCalledWith(1, {
+      where: { id: 'r1' },
+    });
+    // Only a tombstone, and only one that no longer has replies.
+    expect(prisma.quack.deleteMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        id: 'parent',
+        deletedAt: { not: null },
+        replies: { none: {} },
+      },
+    });
+  });
+
+  it('does not touch any parent when deleting a quack in the feed', async () => {
+    prisma.quack.findFirst.mockResolvedValue(aQuackToDelete(0, null));
+
+    await repository.deleteQuack('q1', 'u1');
+
+    expect(prisma.quack.deleteMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries as a tombstone when a reply lands mid-delete and Restrict refuses', async () => {
+    prisma.quack.findFirst
+      .mockResolvedValueOnce(aQuackToDelete(0))
+      .mockResolvedValueOnce(aQuackToDelete(1));
+    prisma.quack.deleteMany.mockRejectedValueOnce(prismaError('P2003'));
+
+    await expect(repository.deleteQuack('q1', 'u1')).resolves.toBe(
+      'tombstoned',
+    );
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(prisma.quack.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up after one retry', async () => {
+    prisma.quack.findFirst.mockResolvedValue(aQuackToDelete(0));
+    prisma.quack.deleteMany.mockRejectedValue(prismaError('P2003'));
+
+    await expect(repository.deleteQuack('q1', 'u1')).rejects.toThrow(
+      'Prisma P2003',
+    );
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry other errors', async () => {
+    prisma.quack.findFirst.mockResolvedValue(aQuackToDelete(0));
+    prisma.quack.deleteMany.mockRejectedValue(new Error('boom'));
+
+    await expect(repository.deleteQuack('q1', 'u1')).rejects.toThrow('boom');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('QuackRepository.getQuackAuthorId', () => {
@@ -343,5 +432,107 @@ describe('QuackRepository.createQuack', () => {
       poll: { include: { votes: { where: { userId: 'u1' } } } },
     });
     expect(quack.poll).toMatchObject({ totalVotes: 0, myVoteOptionId: null });
+  });
+});
+
+describe('QuackRepository replies in the feed', () => {
+  const aPrismaReply = (
+    overrides: Partial<PrismaQuackWithRelations['replies'][number]> = {},
+  ): PrismaQuackWithRelations['replies'][number] => ({
+    ...aPrismaQuack({ id: 'r1', text: 'Pizza', parentId: 'q1' }),
+    ...overrides,
+  });
+
+  it('lists only quacks in the feed, never replies on their own', async () => {
+    await repository.getQuacks(VIEWER_ID);
+
+    expect(findManyWhere()?.parentId).toBeNull();
+  });
+
+  it('keeps tombstones in the unfiltered feed, as placeholders for their replies', async () => {
+    await repository.getQuacks(VIEWER_ID);
+
+    expect(findManyWhere()?.deletedAt).toBeUndefined();
+  });
+
+  it.each([
+    ['a search', ['bread'], undefined],
+    ['the Mine filter', [], 'u1'],
+  ])('never returns a tombstone for %s', async (_label, terms, authorId) => {
+    await repository.getQuacks(VIEWER_ID, terms, authorId);
+
+    expect(findManyWhere()?.deletedAt).toBeNull();
+  });
+
+  it('loads replies with their authors, oldest first', async () => {
+    await repository.getQuacks(VIEWER_ID);
+
+    expect(findManyInclude()?.replies).toEqual({
+      include: { user: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  });
+
+  it('maps a tombstone with its replies', async () => {
+    prisma.quack.findMany.mockResolvedValue([
+      aPrismaQuack({
+        text: null,
+        deletedAt: new Date('2026-01-02T12:00:00Z'),
+        replies: [aPrismaReply()],
+      }),
+    ]);
+
+    const [quack] = await repository.getQuacks(VIEWER_ID);
+
+    expect(quack.isDeleted).toBe(true);
+    expect(quack.text).toBeNull();
+    expect(quack.replies).toEqual([
+      expect.objectContaining({ id: 'r1', text: 'Pizza', parentId: 'q1' }),
+    ]);
+  });
+});
+
+describe('QuackRepository.getReplyTarget', () => {
+  it('tells a reply and a tombstone apart', async () => {
+    prisma.quack.findUnique.mockResolvedValue({
+      parentId: 'q0',
+      deletedAt: null,
+    } as never);
+
+    await expect(repository.getReplyTarget('r1')).resolves.toEqual({
+      isReply: true,
+      isDeleted: false,
+    });
+  });
+
+  it('returns null for an unknown quack', async () => {
+    prisma.quack.findUnique.mockResolvedValue(null);
+
+    await expect(repository.getReplyTarget('nope')).resolves.toBeNull();
+  });
+});
+
+describe('QuackRepository.createReply', () => {
+  it('creates a text-only reply linked to its parent', async () => {
+    prisma.quack.create.mockResolvedValue(
+      aPrismaQuack({ id: 'r1', text: 'hi', parentId: 'q1' }),
+    );
+
+    await expect(
+      repository.createReply({ text: 'hi', userId: 'u1', parentId: 'q1' }),
+    ).resolves.toMatchObject({ id: 'r1', parentId: 'q1', text: 'hi' });
+    expect(prisma.quack.create.mock.calls[0][0].data).toEqual({
+      text: 'hi',
+      userId: 'u1',
+      parentId: 'q1',
+    });
+  });
+
+  it('returns null when the parent is gone (foreign key refused)', async () => {
+    prisma.quack.create.mockRejectedValue(prismaError('P2003'));
+
+    await expect(
+      repository.createReply({ text: 'hi', userId: 'u1', parentId: 'gone' }),
+    ).resolves.toBeNull();
   });
 });

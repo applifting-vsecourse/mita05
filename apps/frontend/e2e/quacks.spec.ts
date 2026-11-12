@@ -5,10 +5,11 @@ import { signIn } from "./signIn"
 const API = "http://localhost:4050/api"
 
 async function findQuackNotBy(page: Page, username: string): Promise<{ id: string }> {
-  const quacks: { id: string; user: { username: string } }[] = await (
+  // A placeholder for a deleted quack has no author (user: null), so skip it.
+  const quacks: { id: string; user: { username: string } | null }[] = await (
     await page.request.get(`${API}/quacks`)
   ).json()
-  return quacks.find((quack) => quack.user.username !== username)!
+  return quacks.find((quack) => quack.user !== null && quack.user.username !== username)!
 }
 
 test("author can post a quack and delete it", async ({ page }) => {
