@@ -21,6 +21,8 @@ const quack = (id: string, userId: string, text: string): Quack => ({
   text,
   mood: null,
   userId,
+  isDeleted: false,
+  replies: [],
   createdAt: new Date("2026-01-01T12:00:00Z"),
   user: { id: userId, name: `User ${userId}`, username: userId },
   poll: null,

@@ -62,3 +62,8 @@ export type QuackFormValues = z.output<typeof quackFormSchema>
 export const emptyPoll = (): NonNullable<QuackFormInput["poll"]> => ({
   options: Array.from({ length: POLL_MIN_ANSWERS }, () => ({ value: "" })),
 })
+
+// A reply is text only (no mood, no poll), with the same length rule as a quack.
+export const replyFormSchema = quackFormSchema.pick({ text: true })
+
+export type ReplyFormValues = z.output<typeof replyFormSchema>

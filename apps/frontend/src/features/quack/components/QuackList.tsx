@@ -14,7 +14,7 @@ type QuackListProps = {
   /** The active search, if any — the empty state then says nothing matched. */
   search?: string
   onClearSearch?: () => void
-  /** The signed-in user, whose quacks get a Delete action. */
+  /** The signed-in user, whose quacks and replies get a Delete action. */
   viewerId?: string
   /** The signed-in user is a moderator, so every quack gets a Delete action. */
   isAdmin?: boolean
@@ -107,8 +107,9 @@ export function QuackList({
         <QuackItem
           key={quack.id}
           quack={quack}
-          isOwn={viewerId !== undefined && quack.userId === viewerId}
+          viewerId={viewerId}
           isAdmin={isAdmin}
+          canReply
         />
       ))}
     </div>

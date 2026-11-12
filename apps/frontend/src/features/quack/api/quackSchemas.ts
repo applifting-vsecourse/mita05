@@ -24,17 +24,47 @@ export const pollSchema = z.object({
   myVoteOptionId: z.string().nullable(),
 })
 
-export const quackSchema = z.object({
+// Replies are text only and one level deep.
+export const replySchema = z.object({
   id: z.string(),
+  text: z.string(),
+  userId: z.string(),
+  parentId: z.string(),
+  createdAt: z.coerce.date(),
+  user: quackUserSchema,
+})
+
+const liveQuackSchema = z.object({
+  id: z.string(),
+  isDeleted: z.literal(false),
   text: z.string(),
   mood: quackMoodSchema.nullable(),
   userId: z.string(),
   createdAt: z.coerce.date(),
   user: quackUserSchema,
   poll: pollSchema.nullable(),
+  replies: z.array(replySchema),
 })
+
+// A deleted quack kept only as a placeholder for its replies. The server erased
+// its text, mood and poll and never sends its author.
+const deletedQuackSchema = z.object({
+  id: z.string(),
+  isDeleted: z.literal(true),
+  text: z.null(),
+  mood: z.null(),
+  userId: z.null(),
+  createdAt: z.coerce.date(),
+  user: z.null(),
+  poll: z.null(),
+  replies: z.array(replySchema),
+})
+
+export const quackSchema = z.discriminatedUnion("isDeleted", [liveQuackSchema, deletedQuackSchema])
 
 export const quacksSchema = z.array(quackSchema)
 
 export type Quack = z.infer<typeof quackSchema>
+export type LiveQuack = z.infer<typeof liveQuackSchema>
+export type Reply = z.infer<typeof replySchema>
 export type Poll = z.infer<typeof pollSchema>
