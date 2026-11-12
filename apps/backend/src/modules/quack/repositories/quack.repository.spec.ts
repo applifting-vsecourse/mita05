@@ -32,6 +32,8 @@ const aPrismaQuack = (
   userId: 'u1',
   createdAt: new Date('2026-01-01T12:00:00Z'),
   updatedAt: new Date('2026-01-01T12:00:00Z'),
+  parentId: null,
+  deletedAt: null,
   user: {
     id: 'u1',
     name: 'Caffeinated Duck',
@@ -47,6 +49,7 @@ const aPrismaQuack = (
     defaultMood: null,
   },
   poll: null,
+  replies: [],
   ...overrides,
 });
 
@@ -91,13 +94,15 @@ describe('QuackRepository.getQuacks', () => {
   it('applies no filter without search terms', async () => {
     await repository.getQuacks(VIEWER_ID);
 
-    expect(findManyWhere()).toEqual({ AND: [] });
+    expect(findManyWhere()).toEqual({ parentId: null, AND: [] });
   });
 
   it('requires every term to match the text, author name or username', async () => {
     await repository.getQuacks(VIEWER_ID, ['lunch', 'adela']);
 
     expect(findManyWhere()).toEqual({
+      parentId: null,
+      deletedAt: null,
       AND: [matchesAnywhere('lunch'), matchesAnywhere('adela')],
     });
   });
@@ -106,6 +111,8 @@ describe('QuackRepository.getQuacks', () => {
     await repository.getQuacks(VIEWER_ID, ['50%', 'snake_case', 'back\\slash']);
 
     expect(findManyWhere()).toEqual({
+      parentId: null,
+      deletedAt: null,
       AND: [
         matchesAnywhere('50\\%'),
         matchesAnywhere('snake\\_case'),
@@ -118,7 +125,9 @@ describe('QuackRepository.getQuacks', () => {
     await repository.getQuacks(VIEWER_ID, ['lunch'], 'u1');
 
     expect(findManyWhere()).toEqual({
+      parentId: null,
       userId: 'u1',
+      deletedAt: null,
       AND: [matchesAnywhere('lunch')],
     });
   });
@@ -131,46 +140,67 @@ describe('QuackRepository.getQuacks', () => {
 });
 
 describe('QuackRepository.deleteQuack', () => {
-  it('deletes only when the given user wrote the quack', async () => {
+  beforeEach(() => {
+    // Run the transaction callback against the same mock.
+    prisma.$transaction.mockImplementation((callback: unknown) =>
+      (callback as (tx: PrismaService) => Promise<unknown>)(prisma),
+    );
     prisma.quack.deleteMany.mockResolvedValue({ count: 1 });
-
-    await expect(repository.deleteQuack('q1', 'u1')).resolves.toBe(true);
-    expect(prisma.quack.deleteMany).toHaveBeenCalledWith({
-      where: { id: 'q1', userId: 'u1' },
-    });
   });
 
-  it('deletes whoever wrote the quack when the author is null', async () => {
-    prisma.quack.deleteMany.mockResolvedValue({ count: 1 });
+  type FoundQuack = Awaited<ReturnType<typeof prisma.quack.findFirst>>;
+  const aQuackToDelete = (
+    replies: number,
+    parentId: string | null = null,
+  ): FoundQuack => ({ parentId, _count: { replies } }) as unknown as FoundQuack;
 
-    await expect(repository.deleteQuack('q1', null)).resolves.toBe(true);
+  it('deletes only when the given user wrote the quack', async () => {
+    prisma.quack.findFirst.mockResolvedValue(aQuackToDelete(0));
+
+    await expect(repository.deleteQuack('q1', 'u1')).resolves.toBe('deleted');
+    expect(prisma.quack.findFirst.mock.calls[0][0]?.where).toEqual({
+      id: 'q1',
+      deletedAt: null,
+      userId: 'u1',
+    });
     expect(prisma.quack.deleteMany).toHaveBeenCalledWith({
       where: { id: 'q1' },
     });
   });
 
-  it('reports false when nothing matched', async () => {
-    prisma.quack.deleteMany.mockResolvedValue({ count: 0 });
+  it('deletes whoever wrote the quack when the author is null', async () => {
+    prisma.quack.findFirst.mockResolvedValue(aQuackToDelete(0));
 
-    await expect(repository.deleteQuack('q1', 'someone-else')).resolves.toBe(
-      false,
-    );
+    await expect(repository.deleteQuack('q1', null)).resolves.toBe('deleted');
+    expect(prisma.quack.findFirst.mock.calls[0][0]?.where).toEqual({
+      id: 'q1',
+      deletedAt: null,
+    });
+  });
+
+  it('reports null when nothing matched', async () => {
+    prisma.quack.findFirst.mockResolvedValue(null);
+
+    await expect(
+      repository.deleteQuack('q1', 'someone-else'),
+    ).resolves.toBeNull();
+    expect(prisma.quack.deleteMany).not.toHaveBeenCalled();
   });
 });
 
 describe('QuackRepository.getQuackAuthorId', () => {
   it("returns the author's id", async () => {
-    prisma.quack.findUnique.mockResolvedValue(aPrismaQuack({ userId: 'u1' }));
+    prisma.quack.findFirst.mockResolvedValue(aPrismaQuack({ userId: 'u1' }));
 
     await expect(repository.getQuackAuthorId('q1')).resolves.toBe('u1');
-    expect(prisma.quack.findUnique).toHaveBeenCalledWith({
-      where: { id: 'q1' },
+    expect(prisma.quack.findFirst).toHaveBeenCalledWith({
+      where: { id: 'q1', deletedAt: null },
       select: { userId: true },
     });
   });
 
   it('returns null for an unknown quack', async () => {
-    prisma.quack.findUnique.mockResolvedValue(null);
+    prisma.quack.findFirst.mockResolvedValue(null);
 
     await expect(repository.getQuackAuthorId('nope')).resolves.toBeNull();
   });

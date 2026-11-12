@@ -31,17 +31,32 @@ enum QuackMood {
   @@map("quack_mood")
 }
 
+// A quack in the feed has parentId null; a reply points at the quack it answers.
+// Replies are one level deep, so a parent always has parentId null (checked by the
+// service). See docs/adr/0001-deleted-quacks-become-tombstones.md for deletedAt.
+// The migration adds CHECK constraints Prisma can't express: a tombstone has no
+// text or mood, a live quack has text, and a reply has no mood and is never a tombstone.
 model Quack {
   id        String     @id @default(cuid())
-  text      String     @db.Text
+  // Null only on a tombstone: a deleted quack kept as a placeholder for its replies.
+  text      String?    @db.Text
+  // Always null on replies and on tombstones.
   mood      QuackMood?
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   poll      Poll?
+  // Restrict: a quack that still has replies can't be hard-deleted, only turned
+  // into a tombstone — not even by a reply that lands mid-delete.
+  parent    Quack?     @relation("QuackReplies", fields: [parentId], references: [id], onDelete: Restrict)
+  parentId  String?
+  replies   Quack[]    @relation("QuackReplies")
+  // Set when a quack with replies is deleted; text, mood and poll are erased with it.
+  deletedAt DateTime?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @default(now()) @updatedAt
 
   @@index([userId])
+  @@index([parentId, createdAt])
   @@map("quack")
 }
 

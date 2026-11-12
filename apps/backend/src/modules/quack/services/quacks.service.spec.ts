@@ -17,6 +17,7 @@ const aQuack = (overrides: Partial<Quack> = {}): Quack => ({
   userId: 'u1',
   createdAt: new Date('2026-01-01T12:00:00Z'),
   updatedAt: new Date('2026-01-01T12:00:00Z'),
+  isDeleted: false,
   user: { id: 'u1', name: 'Caffeinated Duck', username: 'CaffeinatedDuck' },
   ...overrides,
 });
@@ -170,7 +171,7 @@ describe('QuacksService', () => {
     it("lets an admin delete someone else's quack, without the author filter", async () => {
       const repository = mock<QuackRepository>();
       repository.getQuackAuthorId.mockResolvedValue('u1');
-      repository.deleteQuack.mockResolvedValue(true);
+      repository.deleteQuack.mockResolvedValue('deleted');
 
       const service = new QuacksService(repository);
 
@@ -193,7 +194,7 @@ describe('QuacksService', () => {
     it("deletes the user's own quack", async () => {
       const repository = mock<QuackRepository>();
       repository.getQuackAuthorId.mockResolvedValue('u1');
-      repository.deleteQuack.mockResolvedValue(true);
+      repository.deleteQuack.mockResolvedValue('deleted');
 
       const service = new QuacksService(repository);
 
@@ -228,7 +229,7 @@ describe('QuacksService', () => {
     it('reports a quack deleted in the meantime as not found', async () => {
       const repository = mock<QuackRepository>();
       repository.getQuackAuthorId.mockResolvedValue('u1');
-      repository.deleteQuack.mockResolvedValue(false);
+      repository.deleteQuack.mockResolvedValue(null);
 
       const service = new QuacksService(repository);
 

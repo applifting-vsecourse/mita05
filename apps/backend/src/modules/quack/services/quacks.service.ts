@@ -1,9 +1,11 @@
 import {
+  CannotReplyToReplyError,
   parseSearchTerms,
   Quack,
   QuackMood,
   QuackNotFoundError,
   QuackNotOwnedError,
+  QuackReply,
 } from '@/modules/quack/domain/quack';
 import { QuackRepository } from '@/modules/quack/repositories/quack.repository';
 import { Identity } from '@/shared/auth/domain/identity';
@@ -44,8 +46,41 @@ export class QuacksService {
   }
 
   /**
-   * Deletes a quack with its poll and votes. Authors may delete their own
-   * quacks; admins (moderators) may delete anyone's.
+   * Replies to a quack in the feed. Replies are text only and one level deep.
+   * Throws QuackNotFoundError when the quack doesn't exist or is a tombstone,
+   * and CannotReplyToReplyError when it is itself a reply.
+   */
+  async createReply(
+    user: Identity,
+    parentId: string,
+    text: string,
+  ): Promise<QuackReply> {
+    const target = await this.quackRepository.getReplyTarget(parentId);
+    // For users a tombstone doesn't exist: there's nothing left to reply to.
+    if (target === null || target.isDeleted) {
+      throw new QuackNotFoundError(parentId);
+    }
+    if (target.isReply) {
+      throw new CannotReplyToReplyError(parentId);
+    }
+
+    const reply = await this.quackRepository.createReply({
+      text,
+      parentId,
+      // the author is taken from the session, never from the request
+      userId: user.id,
+    });
+    // Null: the quack was deleted between the check and the insert.
+    if (reply === null) {
+      throw new QuackNotFoundError(parentId);
+    }
+    return reply;
+  }
+
+  /**
+   * Deletes a quack or a reply. Authors may delete their own; admins
+   * (moderators) may delete anyone's. A quack with replies becomes a tombstone
+   * (content erased, replies kept) — see QuackRepository.deleteQuack.
    * Throws QuackNotFoundError or QuackNotOwnedError.
    */
   async deleteQuack(user: Identity, quackId: string): Promise<void> {
@@ -60,12 +95,12 @@ export class QuacksService {
     }
 
     // For non-admins the repository re-checks the author, so this can't delete
-    // someone else's quack. False here means it was deleted in the meantime.
-    const isDeleted = await this.quackRepository.deleteQuack(
+    // someone else's quack. Null here means it was deleted in the meantime.
+    const deletion = await this.quackRepository.deleteQuack(
       quackId,
       isAdmin ? null : user.id,
     );
-    if (!isDeleted) {
+    if (deletion === null) {
       throw new QuackNotFoundError(quackId);
     }
   }
