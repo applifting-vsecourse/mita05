@@ -51,6 +51,12 @@ export type Quack = {
   replies?: QuackReply[];
 };
 
+/** A quack's likes as one viewer sees them. See docs/adr/0002-likes.md. */
+export type LikeSummary = {
+  likeCount: number;
+  likedByMe: boolean;
+};
+
 /** What happened to a quack the user asked to delete. */
 export type QuackDeletion = 'deleted' | 'tombstoned';
 

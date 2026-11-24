@@ -1,5 +1,6 @@
 import {
   CannotReplyToReplyError,
+  LikeSummary,
   parseSearchTerms,
   Quack,
   QuackMood,
@@ -103,5 +104,23 @@ export class QuacksService {
     if (deletion === null) {
       throw new QuackNotFoundError(quackId);
     }
+  }
+
+  /**
+   * Likes a quack or a reply as the signed-in user. Liking twice changes nothing.
+   * Throws QuackNotFoundError when the quack doesn't exist or is a tombstone.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async likeQuack(user: Identity, quackId: string): Promise<LikeSummary> {
+    throw new Error('not implemented');
+  }
+
+  /**
+   * Takes back the signed-in user's like. Unliking when not liked changes nothing.
+   * Throws QuackNotFoundError when the quack doesn't exist or is a tombstone.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async unlikeQuack(user: Identity, quackId: string): Promise<LikeSummary> {
+    throw new Error('not implemented');
   }
 }

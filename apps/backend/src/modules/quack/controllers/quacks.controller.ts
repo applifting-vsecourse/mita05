@@ -1,5 +1,6 @@
 import {
   CannotReplyToReplyError,
+  LikeSummary,
   QuackNotFoundError,
   QuackNotOwnedError,
 } from '@/modules/quack/domain/quack';
@@ -19,6 +20,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Put,
   Query,
   UseGuards,
   UsePipes,
@@ -151,5 +153,31 @@ export class QuacksController {
       }
       throw error;
     }
+  }
+
+  @Put(':quackId/like')
+  @ApiOperation({
+    summary: 'Like a quack or a reply (liking twice changes nothing)',
+  })
+  async like(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @User() user: Identity,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @Param('quackId') quackId: string,
+  ): Promise<LikeSummary> {
+    throw new Error('not implemented');
+  }
+
+  @Delete(':quackId/like')
+  @ApiOperation({
+    summary: 'Take back your like (when not liked, changes nothing)',
+  })
+  async unlike(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @User() user: Identity,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @Param('quackId') quackId: string,
+  ): Promise<LikeSummary> {
+    throw new Error('not implemented');
   }
 }

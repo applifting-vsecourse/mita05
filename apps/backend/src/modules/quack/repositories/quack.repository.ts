@@ -5,6 +5,7 @@ import {
   pollInclude,
 } from '@/modules/poll/repositories/poll.prisma';
 import {
+  LikeSummary,
   Quack,
   QuackAuthor,
   QuackDeletion,
@@ -285,5 +286,24 @@ export class QuackRepository {
       });
     }
     return 'deleted';
+  }
+
+  /**
+   * Adds the user's like, or keeps the one already there, and returns the
+   * quack's likes as that user sees them. Null when there is no live quack
+   * with that id (missing, deleted or a tombstone).
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async like(quackId: string, userId: string): Promise<LikeSummary | null> {
+    throw new Error('not implemented');
+  }
+
+  /**
+   * Removes the user's like, if there is one, and returns the quack's likes
+   * as that user sees them. Null when there is no live quack with that id.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async unlike(quackId: string, userId: string): Promise<LikeSummary | null> {
+    throw new Error('not implemented');
   }
 }
