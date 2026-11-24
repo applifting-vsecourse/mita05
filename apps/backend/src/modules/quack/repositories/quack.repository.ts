@@ -14,26 +14,56 @@ import {
 } from '@/modules/quack/domain/quack';
 import { Injectable } from '@nestjs/common';
 
-const replyInclude = {
-  user: true,
-} satisfies Prisma.QuackInclude;
+// Loads a quack's likes the way one viewer sees them: the count comes from
+// COUNT() over quack_like, never a stored number, and the only like row loaded
+// is the viewer's own, to decide likedByMe. See docs/adr/0002-likes.md.
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+const likesInclude = (viewerId: string) =>
+  ({
+    likes: { where: { userId: viewerId }, select: { userId: true } },
+    _count: { select: { likes: true } },
+  }) satisfies Prisma.QuackInclude;
 
-// Loads a quack's author, its poll as the viewer sees it, and its replies
-// (oldest first, one level deep) in the same query.
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+const replyInclude = (viewerId: string) =>
+  ({
+    user: true,
+    ...likesInclude(viewerId),
+  }) satisfies Prisma.QuackInclude;
+
+// Loads a quack's author, its poll and likes as the viewer sees them, and its
+// replies (oldest first, one level deep, each with its own likes) in the same query.
 // The return type is inferred on purpose: Prisma derives the row type from it.
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const quackInclude = (viewerId: string) =>
   ({
     user: true,
     poll: { include: pollInclude(viewerId) },
-    replies: { include: replyInclude, orderBy: { createdAt: 'asc' } },
+    replies: {
+      include: replyInclude(viewerId),
+      orderBy: { createdAt: 'asc' },
+    },
+    ...likesInclude(viewerId),
   }) satisfies Prisma.QuackInclude;
 
 export type PrismaQuackWithRelations = Prisma.QuackGetPayload<{
   include: ReturnType<typeof quackInclude>;
 }>;
 
-type PrismaReply = Prisma.QuackGetPayload<{ include: typeof replyInclude }>;
+type PrismaReply = Prisma.QuackGetPayload<{
+  include: ReturnType<typeof replyInclude>;
+}>;
+
+type PrismaLikes = Prisma.QuackGetPayload<{
+  include: ReturnType<typeof likesInclude>;
+}>;
+
+const mapPrismaLikesToDomain = (
+  quack: Pick<PrismaLikes, 'likes' | '_count'>,
+): LikeSummary => ({
+  likeCount: quack._count.likes,
+  likedByMe: quack.likes.length > 0,
+});
 
 const mapPrismaUserToAuthor = (user: PrismaReply['user']): QuackAuthor => ({
   id: user.id,
@@ -54,6 +84,7 @@ const mapPrismaReplyToDomain = (reply: PrismaReply): QuackReply => {
     parentId: reply.parentId,
     createdAt: reply.createdAt,
     user: mapPrismaUserToAuthor(reply.user),
+    ...mapPrismaLikesToDomain(reply),
   };
 };
 
@@ -68,6 +99,7 @@ const mapPrismaQuackToDomain = (quack: PrismaQuackWithRelations): Quack => ({
   user: quack.user ? mapPrismaUserToAuthor(quack.user) : undefined,
   poll: quack.poll ? mapPrismaPollToDomain(quack.poll) : null,
   replies: quack.replies.map(mapPrismaReplyToDomain),
+  ...mapPrismaLikesToDomain(quack),
 });
 
 // P2003: a foreign key refused the write — here, the parent quack is gone.
@@ -195,7 +227,7 @@ export class QuackRepository {
           userId: replyData.userId,
           parentId: replyData.parentId,
         },
-        include: replyInclude,
+        include: replyInclude(replyData.userId),
       });
       return mapPrismaReplyToDomain(reply);
     } catch (error) {
@@ -264,11 +296,15 @@ export class QuackRepository {
     if (!quack) return null;
 
     if (quack._count.replies > 0) {
-      await tx.poll.deleteMany({ where: { quackId } });
+      // The update comes first: it locks the row, so a like that is being
+      // added right now (it holds a share lock, see lockLiveQuack) commits
+      // before the likes below are erased, and a later one sees the tombstone.
       await tx.quack.update({
         where: { id: quackId },
         data: { text: null, mood: null, deletedAt: new Date() },
       });
+      await tx.poll.deleteMany({ where: { quackId } });
+      await tx.quackLike.deleteMany({ where: { quackId } });
       return 'tombstoned';
     }
 
@@ -293,17 +329,57 @@ export class QuackRepository {
    * quack's likes as that user sees them. Null when there is no live quack
    * with that id (missing, deleted or a tombstone).
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async like(quackId: string, userId: string): Promise<LikeSummary | null> {
-    throw new Error('not implemented');
+    return this.prisma.$transaction(async (tx) => {
+      if (!(await this.lockLiveQuack(tx, quackId))) return null;
+      // ON CONFLICT DO NOTHING: the (quackId, userId) primary key keeps it to
+      // one like, also when two requests insert at the same moment.
+      await tx.quackLike.createMany({
+        data: [{ quackId, userId }],
+        skipDuplicates: true,
+      });
+      return this.getLikes(tx, quackId, userId);
+    });
   }
 
   /**
    * Removes the user's like, if there is one, and returns the quack's likes
    * as that user sees them. Null when there is no live quack with that id.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async unlike(quackId: string, userId: string): Promise<LikeSummary | null> {
-    throw new Error('not implemented');
+    return this.prisma.$transaction(async (tx) => {
+      if (!(await this.lockLiveQuack(tx, quackId))) return null;
+      await tx.quackLike.deleteMany({ where: { quackId, userId } });
+      return this.getLikes(tx, quackId, userId);
+    });
+  }
+
+  /**
+   * Takes a share lock on the quack if it is live (exists, not a tombstone).
+   * Deleting or tombstoning the quack waits for the lock, and a like waits for
+   * a delete in progress and then sees its result, so a like never survives on
+   * a tombstone. Likes don't block each other.
+   */
+  private async lockLiveQuack(
+    tx: Prisma.TransactionClient,
+    quackId: string,
+  ): Promise<boolean> {
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "quack"
+      WHERE "id" = ${quackId} AND "deletedAt" IS NULL
+      FOR SHARE`;
+    return rows.length > 0;
+  }
+
+  private async getLikes(
+    tx: Prisma.TransactionClient,
+    quackId: string,
+    viewerId: string,
+  ): Promise<LikeSummary> {
+    const quack = await tx.quack.findUniqueOrThrow({
+      where: { id: quackId },
+      select: likesInclude(viewerId),
+    });
+    return mapPrismaLikesToDomain(quack);
   }
 }

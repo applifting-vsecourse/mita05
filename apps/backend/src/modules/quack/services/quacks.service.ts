@@ -110,17 +110,25 @@ export class QuacksService {
    * Likes a quack or a reply as the signed-in user. Liking twice changes nothing.
    * Throws QuackNotFoundError when the quack doesn't exist or is a tombstone.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async likeQuack(user: Identity, quackId: string): Promise<LikeSummary> {
-    throw new Error('not implemented');
+    // the like belongs to the user from the session, never from the request
+    const likes = await this.quackRepository.like(quackId, user.id);
+    if (likes === null) {
+      throw new QuackNotFoundError(quackId);
+    }
+    return likes;
   }
 
   /**
    * Takes back the signed-in user's like. Unliking when not liked changes nothing.
    * Throws QuackNotFoundError when the quack doesn't exist or is a tombstone.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async unlikeQuack(user: Identity, quackId: string): Promise<LikeSummary> {
-    throw new Error('not implemented');
+    // Only the session user's own like can be removed.
+    const likes = await this.quackRepository.unlike(quackId, user.id);
+    if (likes === null) {
+      throw new QuackNotFoundError(quackId);
+    }
+    return likes;
   }
 }

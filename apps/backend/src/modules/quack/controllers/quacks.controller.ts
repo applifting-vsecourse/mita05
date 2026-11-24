@@ -1,6 +1,5 @@
 import {
   CannotReplyToReplyError,
-  LikeSummary,
   QuackNotFoundError,
   QuackNotOwnedError,
 } from '@/modules/quack/domain/quack';
@@ -34,6 +33,8 @@ import {
 } from '@nestjs/swagger';
 import { CreateQuackDto } from './dto/create-quack.dto';
 import { CreateReplyDto } from './dto/create-reply.dto';
+import { EmptyBodyDto } from './dto/empty-body.dto';
+import { LikeSummaryResponseDto } from './dto/like-summary.response.dto';
 import { ListQuacksQueryDto } from './dto/list-quacks.query.dto';
 import { QuackResponseDto, ReplyResponseDto } from './dto/quack.response.dto';
 
@@ -159,25 +160,51 @@ export class QuacksController {
   @ApiOperation({
     summary: 'Like a quack or a reply (liking twice changes nothing)',
   })
+  @ApiResponse({ status: 200, type: LikeSummaryResponseDto })
+  @ApiResponse({ status: 401, description: 'Not signed in' })
+  @ApiResponse({ status: 404, description: 'Quack not found or deleted' })
   async like(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     @User() user: Identity,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     @Param('quackId') quackId: string,
-  ): Promise<LikeSummary> {
-    throw new Error('not implemented');
+    // Validated only, to refuse a body that names a user (400).
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @Body() _body: EmptyBodyDto,
+  ): Promise<LikeSummaryResponseDto> {
+    try {
+      return LikeSummaryResponseDto.fromDomain(
+        await this.quacksService.likeQuack(user, quackId),
+      );
+    } catch (error) {
+      if (error instanceof QuackNotFoundError) {
+        throw new NotFoundException('Quack not found');
+      }
+      throw error;
+    }
   }
 
   @Delete(':quackId/like')
   @ApiOperation({
     summary: 'Take back your like (when not liked, changes nothing)',
   })
+  @ApiResponse({ status: 200, type: LikeSummaryResponseDto })
+  @ApiResponse({ status: 401, description: 'Not signed in' })
+  @ApiResponse({ status: 404, description: 'Quack not found or deleted' })
   async unlike(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     @User() user: Identity,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     @Param('quackId') quackId: string,
-  ): Promise<LikeSummary> {
-    throw new Error('not implemented');
+    // Validated only, to refuse a body that names a user (400).
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @Body() _body: EmptyBodyDto,
+  ): Promise<LikeSummaryResponseDto> {
+    try {
+      return LikeSummaryResponseDto.fromDomain(
+        await this.quacksService.unlikeQuack(user, quackId),
+      );
+    } catch (error) {
+      if (error instanceof QuackNotFoundError) {
+        throw new NotFoundException('Quack not found');
+      }
+      throw error;
+    }
   }
 }

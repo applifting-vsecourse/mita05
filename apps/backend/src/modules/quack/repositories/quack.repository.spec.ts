@@ -56,6 +56,8 @@ const aPrismaQuack = (
   },
   poll: null,
   replies: [],
+  likes: [],
+  _count: { likes: 0 },
   ...overrides,
 });
 
@@ -464,11 +466,15 @@ describe('QuackRepository replies in the feed', () => {
     expect(findManyWhere()?.deletedAt).toBeNull();
   });
 
-  it('loads replies with their authors, oldest first', async () => {
+  it('loads replies with their authors and likes, oldest first', async () => {
     await repository.getQuacks(VIEWER_ID);
 
     expect(findManyInclude()?.replies).toEqual({
-      include: { user: true },
+      include: {
+        user: true,
+        likes: { where: { userId: VIEWER_ID }, select: { userId: true } },
+        _count: { select: { likes: true } },
+      },
       orderBy: { createdAt: 'asc' },
     });
   });
