@@ -24,6 +24,18 @@ export const pollSchema = z.object({
   myVoteOptionId: z.string().nullable(),
 })
 
+// A quack's likes as the signed-in user sees them. The count is for everyone;
+// likedByMe is only ever the signed-in user's own like. See docs/adr/0002-likes.md.
+export const likeSummarySchema = z.object({
+  likeCount: z.number().int().nonnegative(),
+  likedByMe: z.boolean(),
+})
+
+// The server always sends likes on a live quack or a reply. They're optional
+// so a quack built on the client (such as the landing page's samples) can
+// leave them out; it then shows no Like button.
+const likeFields = likeSummarySchema.partial().shape
+
 // Replies are text only and one level deep.
 export const replySchema = z.object({
   id: z.string(),
@@ -32,6 +44,7 @@ export const replySchema = z.object({
   parentId: z.string(),
   createdAt: z.coerce.date(),
   user: quackUserSchema,
+  ...likeFields,
 })
 
 const liveQuackSchema = z.object({
@@ -44,10 +57,11 @@ const liveQuackSchema = z.object({
   user: quackUserSchema,
   poll: pollSchema.nullable(),
   replies: z.array(replySchema),
+  ...likeFields,
 })
 
 // A deleted quack kept only as a placeholder for its replies. The server erased
-// its text, mood and poll and never sends its author.
+// its text, mood, poll and likes and never sends its author.
 const deletedQuackSchema = z.object({
   id: z.string(),
   isDeleted: z.literal(true),
@@ -68,3 +82,4 @@ export type Quack = z.infer<typeof quackSchema>
 export type LiveQuack = z.infer<typeof liveQuackSchema>
 export type Reply = z.infer<typeof replySchema>
 export type Poll = z.infer<typeof pollSchema>
+export type LikeSummary = z.infer<typeof likeSummarySchema>

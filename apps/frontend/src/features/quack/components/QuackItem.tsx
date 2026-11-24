@@ -5,8 +5,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { formatDate } from "@/lib/date"
 
+import type { LikeSummary } from "@/features/quack/api/likeQuack"
 import type { Quack, Reply } from "@/features/quack/api/quackSchemas"
 import { DeleteQuackButton } from "@/features/quack/components/DeleteQuackButton"
+import { QuackLikeButton } from "@/features/quack/components/QuackLikeButton"
 import { QuackMoodLabel } from "@/features/quack/components/QuackMoodLabel"
 import { QuackPoll } from "@/features/quack/components/QuackPoll"
 import { ReplyForm } from "@/features/quack/components/ReplyForm"
@@ -22,6 +24,11 @@ type QuackItemProps = {
   /** Shows the Reply button. Off for static previews such as the landing page. */
   canReply?: boolean
 }
+
+// The server sends likes on every live quack and reply; a quack built on the
+// client (the landing page's samples) has none and shows no Like button.
+const hasLikes = <T extends Partial<LikeSummary>>(item: T): item is T & LikeSummary =>
+  item.likeCount !== undefined && item.likedByMe !== undefined
 
 const initialsOf = (name: string) =>
   name
@@ -76,18 +83,26 @@ export function QuackItem({ quack, viewerId, isAdmin, canReply }: QuackItemProps
                 className="mt-2"
               />
             ) : null}
-            {canReply ? (
-              <div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="-ml-3 text-muted-foreground"
-                  aria-expanded={isReplying}
-                  onClick={() => setIsReplying((isOpen) => !isOpen)}
-                >
-                  <MessageCircle />
-                  Reply
-                </Button>
+            {canReply || hasLikes(quack) ? (
+              <div className="-ml-3 flex items-center gap-1">
+                {canReply ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground"
+                    aria-expanded={isReplying}
+                    onClick={() => setIsReplying((isOpen) => !isOpen)}
+                  >
+                    <MessageCircle />
+                    Reply
+                  </Button>
+                ) : null}
+                {hasLikes(quack) ? (
+                  <QuackLikeButton
+                    quackId={quack.id}
+                    likes={quack}
+                  />
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -146,6 +161,15 @@ function ReplyItem({ reply, canDelete }: { reply: Reply; canDelete: boolean }) {
           <time className="text-xs text-muted-foreground">{formatDate(reply.createdAt)}</time>
         </div>
         <p className="text-sm break-words whitespace-pre-line">{reply.text}</p>
+        {hasLikes(reply) ? (
+          <div>
+            <QuackLikeButton
+              quackId={reply.id}
+              likes={reply}
+              className="-ml-2"
+            />
+          </div>
+        ) : null}
       </div>
 
       {canDelete ? (
