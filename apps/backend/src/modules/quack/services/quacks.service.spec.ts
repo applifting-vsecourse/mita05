@@ -27,7 +27,7 @@ const aQuack = (overrides: Partial<Quack> = {}): Quack => ({
 const viewer = { id: 'viewer' } as Identity;
 
 describe('QuacksService', () => {
-  it('returns quacks from the repository', async () => {
+  it('returns quacks from the repository (renamed)', async () => {
     const quacks = [aQuack()];
     const repository = mock<QuackRepository>();
     repository.getQuacks.mockResolvedValue(quacks);
