@@ -4,4 +4,6 @@ export const quackKeys = {
   list: (search: string, isMine = false) => [...quackKeys.lists(), { search, isMine }] as const,
   // A mutation key, not a query key: lets useVote count the votes still queued for one poll.
   vote: (pollId: string) => [...quackKeys.all(), "vote", pollId] as const,
+  // A mutation key, not a query key: lets useLike count the likes still queued for one quack.
+  like: (quackId: string) => [...quackKeys.all(), "like", quackId] as const,
 }

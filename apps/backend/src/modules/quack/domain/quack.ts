@@ -28,6 +28,10 @@ export type QuackReply = {
   parentId: string;
   createdAt: Date;
   user?: QuackAuthor;
+  /** Undefined when not loaded. See docs/adr/0002-likes.md. */
+  likeCount?: number;
+  /** Whether the viewer liked it. Undefined when not loaded. */
+  likedByMe?: boolean;
 };
 
 export type Quack = {
@@ -49,6 +53,19 @@ export type Quack = {
   poll?: Poll | null;
   /** Undefined when not loaded; oldest first. */
   replies?: QuackReply[];
+  /**
+   * Undefined when not loaded. A tombstone has no likes: they are erased with
+   * its content. See docs/adr/0002-likes.md.
+   */
+  likeCount?: number;
+  /** Whether the viewer liked it. Undefined when not loaded. */
+  likedByMe?: boolean;
+};
+
+/** A quack's likes as one viewer sees them. See docs/adr/0002-likes.md. */
+export type LikeSummary = {
+  likeCount: number;
+  likedByMe: boolean;
 };
 
 /** What happened to a quack the user asked to delete. */

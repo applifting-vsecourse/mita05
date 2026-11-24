@@ -37,27 +37,43 @@ enum QuackMood {
 // The migration adds CHECK constraints Prisma can't express: a tombstone has no
 // text or mood, a live quack has text, and a reply has no mood and is never a tombstone.
 model Quack {
-  id        String     @id @default(cuid())
+  id        String      @id @default(cuid())
   // Null only on a tombstone: a deleted quack kept as a placeholder for its replies.
-  text      String?    @db.Text
+  text      String?     @db.Text
   // Always null on replies and on tombstones.
   mood      QuackMood?
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   poll      Poll?
   // Restrict: a quack that still has replies can't be hard-deleted, only turned
   // into a tombstone — not even by a reply that lands mid-delete.
-  parent    Quack?     @relation("QuackReplies", fields: [parentId], references: [id], onDelete: Restrict)
+  parent    Quack?      @relation("QuackReplies", fields: [parentId], references: [id], onDelete: Restrict)
   parentId  String?
-  replies   Quack[]    @relation("QuackReplies")
+  replies   Quack[]     @relation("QuackReplies")
+  likes     QuackLike[]
   // Set when a quack with replies is deleted; text, mood and poll are erased with it.
   deletedAt DateTime?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @default(now()) @updatedAt
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
 
   @@index([userId])
   @@index([parentId, createdAt])
   @@map("quack")
+}
+
+// One like per person per quack (or reply), enforced by the primary key. The
+// count is never stored: it is counted from these rows on read.
+// See docs/adr/0002-likes.md.
+model QuackLike {
+  quack     Quack    @relation(fields: [quackId], references: [id], onDelete: Cascade)
+  quackId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@id([quackId, userId])
+  @@index([userId])
+  @@map("quack_like")
 }
 
 // A quack has zero or one poll. Polls can't be edited or closed, and vote
@@ -155,18 +171,19 @@ model Verification {
 }
 
 model User {
-  id            String     @id
+  id            String      @id
   name          String
   email         String
   emailVerified Boolean
-  image         String?    @db.Text
+  image         String?     @db.Text
   createdAt     DateTime
   updatedAt     DateTime
   sessions      Session[]
   accounts      Account[]
   quacks        Quack[]
   pollVotes     PollVote[]
-  role          UserRole   @default(user)
+  quackLikes    QuackLike[]
+  role          UserRole    @default(user)
 
   username        String? @db.VarChar(50)
   displayUsername String? @db.VarChar(50)

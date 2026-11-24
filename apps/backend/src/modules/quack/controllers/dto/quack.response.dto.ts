@@ -37,6 +37,12 @@ export class ReplyResponseDto {
   @ApiProperty({ type: QuackUserDto })
   user!: QuackUserDto;
 
+  @ApiProperty({ description: 'How many people like the reply' })
+  likeCount?: number;
+
+  @ApiProperty({ description: 'Whether the signed-in user likes it' })
+  likedByMe?: boolean;
+
   static fromDomain(reply: QuackReply): ReplyResponseDto {
     if (!reply.user) {
       throw new Error(
@@ -54,6 +60,8 @@ export class ReplyResponseDto {
         name: reply.user.name,
         username: reply.user.username,
       },
+      likeCount: reply.likeCount,
+      likedByMe: reply.likedByMe,
     };
   }
 }
@@ -105,6 +113,20 @@ export class QuackResponseDto {
   @ApiProperty({ type: [ReplyResponseDto], description: 'Oldest first' })
   replies!: ReplyResponseDto[];
 
+  @ApiProperty({
+    required: false,
+    description:
+      'How many people like the quack. Missing when the quack was deleted (isDeleted)',
+  })
+  likeCount?: number;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Whether the signed-in user likes it. Missing when the quack was deleted (isDeleted)',
+  })
+  likedByMe?: boolean;
+
   static fromDomain(quack: Quack): QuackResponseDto {
     const replies = (quack.replies ?? []).map(ReplyResponseDto.fromDomain);
     if (quack.isDeleted) {
@@ -146,6 +168,8 @@ export class QuackResponseDto {
       },
       poll: quack.poll ? PollResponseDto.fromDomain(quack.poll) : null,
       replies,
+      likeCount: quack.likeCount,
+      likedByMe: quack.likedByMe,
     };
   }
 }
