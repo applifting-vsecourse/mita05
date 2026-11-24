@@ -50,3 +50,132 @@ jobs:
 
       - name: Build frontend
         run: pnpm frontend build
+
+  # Backend integration tests: real HTTP requests (supertest) to the Nest app
+  # against a real Postgres. Files: apps/backend/src/**/*.int-spec.ts.
+  test-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: quacker
+          POSTGRES_PASSWORD: quacker
+          POSTGRES_DB: quacker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quacker -d quacker_test"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://quacker:quacker@localhost:5432/quacker_test
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm backend prisma:generate
+
+      # Applies prisma/migrations to the test database, then runs the tests.
+      - name: Integration tests
+        run: pnpm backend test:int
+
+  # End-to-end tests: the whole app (database, backend, frontend) in CI, driven
+  # by Playwright from apps/frontend/e2e.
+  test-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: quacker
+          POSTGRES_PASSWORD: quacker
+          POSTGRES_DB: quacker
+        # Same port as the local Docker Postgres, so apps/backend/.env.example
+        # works unchanged.
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U quacker -d quacker"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create env files
+        run: pnpm env:check
+
+      - name: Install Playwright browser
+        run: pnpm frontend exec playwright install --with-deps chromium
+
+      - name: Migrate and seed the database
+        run: |
+          pnpm backend migrate
+          pnpm backend seed
+
+      - name: Build backend and frontend
+        run: |
+          pnpm backend build
+          pnpm frontend build
+
+      - name: Start backend and frontend
+        run: |
+          mkdir -p logs
+          (cd apps/backend && nohup node --env-file=.env dist/main.js > ../../logs/backend.log 2>&1 &)
+          (cd apps/frontend && nohup pnpm exec vite preview --port 3050 --strictPort > ../../logs/frontend.log 2>&1 &)
+          curl -fsS --retry 60 --retry-delay 1 --retry-all-errors http://localhost:4050/api/health
+          curl -fsS --retry 60 --retry-delay 1 --retry-all-errors -o /dev/null http://localhost:3050/
+
+      - name: End-to-end tests
+        run: pnpm frontend e2e
+
+      - name: Upload Playwright report and server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            apps/frontend/playwright-report/
+            apps/frontend/test-results/
+            logs/
+          retention-days: 7
+
+  # Warns when a pull request removes or rewrites lines in existing tests.
+  # Independent of the other jobs, and deliberately NOT a required status
+  # check: it shows red on the PR for a person to look at, but doesn't block
+  # the merge (or the deploy, which runs on push to main).
+  test-changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          # The PR branch itself, not GitHub's merge commit.
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Check changed tests
+        run: scripts/check-test-changes.sh "origin/${{ github.base_ref }}"

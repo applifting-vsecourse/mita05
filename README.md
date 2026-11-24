@@ -50,11 +50,22 @@ Verification/reset emails are printed to the backend terminal (console mailer) u
 pnpm check-all                     # lint + type-check + tests + builds (what CI runs)
 pnpm backend test                  # backend unit tests (jest)
 pnpm frontend test:ci              # frontend component tests (vitest)
+pnpm backend test:int              # backend integration tests (HTTP + real DB in quacker_test)
+pnpm frontend e2e                  # Playwright end-to-end tests against the running app
 pnpm backend prisma:migrations:run # create + apply a migration after schema changes
 pnpm backend prisma:studio         # browse/edit the database
 pnpm backend seed                  # re-seed the database
 pnpm dev:down                      # stop the database container
 ```
+
+## CI
+
+Every pull request runs `.github/workflows/ci.yml`:
+
+- **verify** — format, lint, type-check, unit tests, builds (`pnpm check-all`).
+- **test-integration** — `pnpm backend test:int` against a Postgres service.
+- **test-e2e** — starts Postgres, the built backend and frontend, then runs `apps/frontend/e2e` with Playwright. On failure, the run has the Playwright report and server logs as an artifact.
+- **test-changes** — fails when the PR removes or rewrites lines in existing tests (`*.spec.ts`, `*.int-spec.ts`, `*.test.tsx`, `apps/frontend/e2e`), so someone looks at why. It is not a required check: it shows red but doesn't block the merge. Run it locally with `scripts/check-test-changes.sh origin/main`.
 
 ## Deployment
 

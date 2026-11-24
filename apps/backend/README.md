@@ -139,6 +139,21 @@ $ pnpm backend test
 $ pnpm backend test:cov
 ```
 
+#### Integration tests
+
+`*.int-spec.ts` files send real HTTP requests (supertest) to the whole Nest app, wired like `main.ts` (`src/app.setup.ts`), against a real database. The example is `src/modules/quack/controllers/quacks.controller.int-spec.ts`: `GET /api/quacks` returns 401 signed out and 200 signed in. Helpers live in `src/testing/integration/`:
+
+- `createTestApp()` — the app, its Prisma client, and `sentEmails` (a recording mailer replaces the real one).
+- `resetDatabase(prisma)` — empties every table; call it in `beforeEach`.
+- `signedInAgent(testApp)` — signs up a fresh user and returns a supertest agent carrying their session cookie.
+
+```bash
+$ pnpm backend docker:up:wait   # the Docker Postgres from `pnpm dev`
+$ pnpm backend test:int
+```
+
+They never touch the dev database: locally they use `quacker_test` in the same Docker Postgres (created and migrated with `prisma migrate deploy` on each run), in CI a Postgres service via `TEST_DATABASE_URL`. A database whose name doesn't end in `_test` is refused.
+
 ### Better Auth
 
 In this application, [**better-auth**](https://www.npmjs.com/package/better-auth) is utilized as the authentication module. It is designed to be easily extended with additional features or plugins, such as social login providers, multi-factor authentication, and more. Whenever database changes related to authentication are required, the following command should be run:
