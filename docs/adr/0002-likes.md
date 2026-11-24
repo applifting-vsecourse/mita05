@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted on 2026-11-24. Not implemented yet. Comes from the likes story ([cases.md](../features/likes/cases.md)).
+Accepted on 2026-11-24. Implemented in migration `20261124162908_add_quack_likes`. Comes from the likes story ([cases.md](../features/likes/cases.md)).
 
 ## Context
 
